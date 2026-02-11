@@ -1,0 +1,5 @@
+body { font-family: sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+.row { display: flex; gap: 8px; margin-bottom: 12px; }
+input { flex: 1; padding: 10px; }
+button { padding: 10px 14px; cursor: pointer; }
+small { color: #666; }
