@@ -1,367 +1,714 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
+    <!-- ════════════════════════════════════════════════════════
+         META & LIBRARIES
+         ════════════════════════════════════════════════════════ -->
     <meta charset="UTF-8">
-    <title>Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>คลังไฟล์ & เอกสาร</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="core.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>body{font-family:'Prompt',sans-serif;background-color:#f9fafb;} .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }</style>
+    
+    <style>
+        body { 
+            font-family: 'Prompt', sans-serif; 
+            background-color: #f9fafb;
+            touch-action: pan-y pinch-zoom;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Animations */
+        .fade-in { 
+            animation: fadeIn 0.3s ease-out; 
+        }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        /* Modal Backdrop */
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        /* ═══════════════════════════════════════════════════════
+           MOBILE RESPONSIVE STYLES
+           ═══════════════════════════════════════════════════════ */
+        
+        /* ปรับ padding บนมือถือ */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem !important;
+            }
+            
+            /* Header */
+            .flex-col.md\\:flex-row {
+                gap: 0.75rem !important;
+            }
+            
+            /* ปุ่มสร้างกลุ่มใหม่ */
+            button {
+                font-size: 14px;
+                padding: 0.5rem 0.75rem;
+                white-space: nowrap;
+            }
+            
+            /* การ์ดกลุ่ม */
+            .grid {
+                grid-template-columns: 1fr !important;
+                gap: 0.75rem !important;
+            }
+            
+            /* Modal บนมือถือ */
+            .modal-backdrop > div {
+                max-width: calc(100vw - 2rem) !important;
+                margin: 1rem;
+            }
+            
+            /* ช่องค้นหา */
+            #search-input {
+                font-size: 14px;
+            }
+        }
+        
+        /* สำหรับจอเล็กมากๆ */
+        @media (max-width: 480px) {
+            body {
+                padding: 0.5rem !important;
+            }
+            
+            h2 {
+                font-size: 1.25rem !important;
+            }
+            
+            p {
+                font-size: 0.875rem !important;
+            }
+            
+            /* ทำให้ปุ่มใหญ่ขึ้น กดง่าย */
+            button, .p-3 {
+                min-height: 44px;
+                touch-action: manipulation;
+            }
+        }
+        
+        /* ป้องกัน zoom บนมือถือ */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        input, textarea, select {
+            font-size: 16px !important; /* ป้องกัน zoom เมื่อ focus */
+        }
+    </style>
+    <link rel="stylesheet" href="responsive.css">
 </head>
+
 <body class="h-screen flex flex-col p-6 overflow-hidden">
-    <!-- Header -->
-    <div class="flex justify-between items-end mb-6 flex-shrink-0">
+
+    <!-- ════════════════════════════════════════════════════════
+         HEADER
+         ════════════════════════════════════════════════════════ -->
+    <div class="flex flex-col md:flex-row justify-between items-end md:items-center mb-6 flex-shrink-0 gap-4">
         <div>
             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <i data-lucide="folder-kanban" class="w-8 h-8 text-blue-600"></i> คลังไฟล์ (File Manager)
+                <i data-lucide="folder-open" class="w-6 h-6 text-blue-600"></i>
+                คลังไฟล์ & เอกสาร
             </h2>
-            <p class="text-sm text-gray-500 mt-1">จัดการไฟล์และเอกสารโครงการ</p>
+            <p class="text-gray-500 text-sm">จัดการโฟลเดอร์งานและไฟล์เอกสารต่างๆ</p>
         </div>
-        <button onclick="DashboardModule.actions.openGroupForm()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow flex gap-2 transition-colors">
-            <i data-lucide="plus"></i> กลุ่มใหม่
-        </button>
+        
+        <div class="flex gap-2 w-full md:w-auto">
+            <!-- ช่องค้นหา -->
+            <div class="relative flex-1 md:w-64 group">
+                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500"></i>
+                <input type="text" 
+                       id="search-input"
+                       placeholder="ค้นหาไฟล์..." 
+                       class="pl-9 pr-4 py-2 border rounded-lg text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none w-full transition-all shadow-sm" 
+                       oninput="FileManager.handleSearch(this.value)">
+            </div>
+            
+            <!-- ปุ่มสร้างกลุ่มใหม่ -->
+            <button onclick="FileManager.openGroupDialog()" 
+                    class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-transform hover:scale-105 whitespace-nowrap">
+                <i data-lucide="plus" class="w-5 h-5"></i> 
+                สร้างกลุ่มใหม่
+            </button>
+        </div>
     </div>
 
-    <!-- Main Content Grid -->
-    <div id="content" class="folder-grid overflow-y-auto pb-10"></div>
-    
-    <!-- Modal Root -->
-    <div id="modal-root" class="fixed inset-0 z-50 pointer-events-none"></div>
+    <!-- ════════════════════════════════════════════════════════
+         MAIN CONTENT AREA
+         ════════════════════════════════════════════════════════ -->
+    <div id="content-area" class="flex-1 overflow-y-auto"></div>
 
+    <!-- ════════════════════════════════════════════════════════
+         MODAL CONTAINER
+         ════════════════════════════════════════════════════════ -->
+    <div id="modal-container" class="hidden"></div>
+
+    <!-- ════════════════════════════════════════════════════════
+         JAVASCRIPT LOGIC
+         ════════════════════════════════════════════════════════ -->
     <script>
-        const DashboardModule = {
-            state: { 
-                // Load from 'myFileGroups' based on JSON backup structure
-                groups: Core.Storage.get('myFileGroups', []), 
-                form: {isOpen:false}, 
-                viewer: {isOpen:false, group:null, path:[], activeFile:null} 
-            },
-
-            init() { 
-                this.render(); 
-            },
-
-            save() { 
-                Core.Storage.set('myFileGroups', this.state.groups); 
-                this.render(); 
-            },
-            
-            // --- Helper to traverse path ---
-            getCurrentList() {
-                if (!this.state.viewer.group) return [];
-                let target = this.state.viewer.group.items;
-                for(const folder of this.state.viewer.path) {
-                    const found = target.find(x => x.id == folder.id);
-                    if (found && found.children) {
-                        target = found.children;
-                    } else {
-                        return []; // Error path
-                    }
-                }
-                return target;
-            },
-
-            actions: {
-                openGroupForm(id=null) { 
-                    const g = id ? this.state.groups.find(x=>x.id==id) : {title:''};
-                    this.state.form = {isOpen:true, data:{...g}, isEdit:!!id, id:id||Date.now(), type:'group'};
-                    this.renderModal();
-                },
-                saveGroup() {
-                    const d = this.state.form.data;
-                    if(!d.title) return alert('กรุณาใส่ชื่อกลุ่ม');
-                    
-                    if(this.state.form.isEdit) { 
-                        const idx=this.state.groups.findIndex(x=>x.id==this.state.form.id); 
-                        if(idx > -1) this.state.groups[idx]={...this.state.groups[idx], ...d}; 
-                    } else { 
-                        // Initialize with items: [] explicitly
-                        this.state.groups.push({id:this.state.form.id, title:d.title, items:[], category:'ทั่วไป', ...d}); 
-                    }
-                    this.state.form.isOpen=false; 
-                    this.save(); 
-                },
-                deleteGroup(id) { 
-                    if(confirm('ยืนยันการลบกลุ่มนี้? ข้อมูลภายในจะหายทั้งหมด')) { 
-                        this.state.groups = this.state.groups.filter(x=>x.id!=id); 
-                        this.save(); 
-                    } 
-                },
-                
-                // --- Viewer Actions ---
-                openViewer(id) { 
-                    const group = this.state.groups.find(x=>x.id==id);
-                    if(!group) return;
-                    // Reset viewer state
-                    this.state.viewer = {isOpen:true, group:group, path:[], activeFile:null}; 
-                    this.renderModal(); 
-                },
-                closeViewer() { 
-                    this.state.viewer.isOpen=false; 
-                    this.renderModal(); 
-                },
-                
-                // Item (File/Folder) Actions
-                openItemForm(type) { 
-                    this.state.form = {
-                        isOpen:true, 
-                        data:{title:'', type:type, sourceType:'file', url:'', fileObj:null, previewObj:null}, 
-                        type:'item'
-                    };
-                    this.renderModal();
-                },
-                handleFile(input, key) { 
-                    if(input.files[0]) { 
-                        this.state.form.data[key]=input.files[0]; 
-                        // Generate preview for image
-                        if(key==='previewObj' || (key==='fileObj' && input.files[0].type.startsWith('image/'))){ 
-                            const r=new FileReader(); 
-                            r.onload=e=>document.getElementById('preview-img').src=e.target.result; 
-                            r.readAsDataURL(input.files[0]); 
-                        } 
-                    } 
-                },
-                async saveItem() {
-                    const d = this.state.form.data;
-                    if(!d.title) return alert('กรุณาใส่ชื่อ');
-                    
-                    const item = {
-                        id: Date.now(), 
-                        title: d.title, 
-                        type: d.type, // 'folder' or 'file'
-                        sourceType: d.sourceType, 
-                        url: d.url,
-                        children: [] // Important for folders
-                    };
-                    
-                    // Save Blob to IndexedDB if it's a file upload
-                    if(d.fileObj || d.previewObj) {
-                        const saved = await Core.DB.saveFile(item.id, d.fileObj, d.previewObj);
-                        if(!saved) alert("Warning: Failed to save file content to DB");
-                    }
-                    
-                    // Add to current path
-                    const target = DashboardModule.getCurrentList();
-                    target.push(item);
-                    
-                    this.state.form.isOpen=false; 
-                    this.save(); // Save structure to localStorage
-                    this.renderModal(); // Refresh Viewer
-                },
-                
-                enterFolder(id) { 
-                    const target = DashboardModule.getCurrentList();
-                    const folder = target.find(x=>x.id==id);
-                    if(folder && folder.type === 'folder') {
-                        if(!folder.children) folder.children = []; // Safety check
-                        this.state.viewer.path.push({id: folder.id, title: folder.title});
-                        this.state.viewer.activeFile = null;
-                        this.renderModal();
-                    }
-                },
-                navUp() { 
-                    this.state.viewer.path.pop(); 
-                    this.state.viewer.activeFile = null;
-                    this.renderModal(); 
-                },
-                
-                async setActiveFile(id) {
-                    const target = DashboardModule.getCurrentList();
-                    const file = target.find(x=>x.id==id);
-                    this.state.viewer.activeFile = file;
-                    
-                    this.renderModal(); // Update UI to show loading or empty first
-                    
-                    const pane = document.getElementById('preview-pane');
-                    pane.innerHTML = `<div class="flex flex-col items-center"><i data-lucide="loader" class="animate-spin mb-2"></i> Loading...</div>`;
-                    lucide.createIcons();
-
-                    // Load Data
-                    let previewUrl = null;
-                    let fileUrl = null;
-
-                    // 1. Try DB
-                    const rec = await Core.DB.getFile(id);
-                    if(rec) {
-                        if(rec.previewBlob) previewUrl = URL.createObjectURL(rec.previewBlob);
-                        if(rec.fileBlob) fileUrl = URL.createObjectURL(rec.fileBlob);
-                    }
-                    
-                    // Render Preview
-                    let contentHtml = '';
-                    
-                    // A. Preview Image
-                    if(previewUrl) {
-                        contentHtml += `<img src="${previewUrl}" class="max-w-full max-h-96 object-contain mb-4 rounded shadow-sm">`;
-                    } else if(file && file.sourceType === 'file' && fileUrl && file.title.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
-                         // If main file is image
-                        contentHtml += `<img src="${fileUrl}" class="max-w-full max-h-96 object-contain mb-4 rounded shadow-sm">`;
-                    } else {
-                        contentHtml += `<div class="text-gray-400 mb-4"><i data-lucide="file" class="w-16 h-16"></i></div>`;
-                    }
-
-                    // B. Info & Actions
-                    contentHtml += `<h3 class="font-bold text-lg mb-2">${file.title}</h3>`;
-                    
-                    if(file.sourceType === 'link') {
-                        contentHtml += `<a href="${file.url}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> เปิดลิงก์</a>`;
-                    } else if (fileUrl) {
-                        contentHtml += `<a href="${fileUrl}" download="${file.title}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> ดาวน์โหลด</a>`;
-                    } else {
-                        contentHtml += `<div class="text-red-500 text-sm">ไม่พบไฟล์ต้นฉบับ (อาจถูกลบหรือไม่ได้บันทึกใน DB)</div>`;
-                    }
-
-                    pane.innerHTML = contentHtml;
-                    lucide.createIcons();
-                },
-                deleteItem(id) {
-                     if(confirm('ลบรายการนี้?')) {
-                        const target = DashboardModule.getCurrentList();
-                        const idx = target.findIndex(x=>x.id == id);
-                        if(idx > -1) {
-                            target.splice(idx, 1);
-                            Core.DB.deleteFile(id); // Cleanup DB
-                            this.save();
-                            this.renderModal();
-                        }
-                     }
-                }
+        /**
+         * ═══════════════════════════════════════════════════════
+         * FILE MANAGER MODULE
+         * ═══════════════════════════════════════════════════════
+         */
+        const FileManager = {
+            // ───────────────────────────────────────────────────
+            // STATE: เก็บสถานะของโปรแกรม
+            // ───────────────────────────────────────────────────
+            state: {
+                groups: [],           // กลุ่มไฟล์ทั้งหมด
+                categories: [],       // หมวดหมู่ที่มี
+                searchQuery: '',      // คำค้นหา
+                currentGroup: null    // กลุ่มที่กำลังดู
             },
             
-            render() {
-                const html = this.state.groups.map(g => `
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md cursor-pointer relative group transition-all" onclick="DashboardModule.actions.openViewer(${g.id})">
-                        <div class="flex items-center gap-3 mb-2">
-                            <div class="p-2 bg-blue-50 rounded-lg text-blue-600"><i data-lucide="package" class="w-6 h-6"></i></div>
-                            <h3 class="font-bold text-lg text-gray-800 truncate">${g.title}</h3>
-                        </div>
-                        <p class="text-sm text-gray-500">${g.items ? g.items.length : 0} รายการ</p>
-                        <button onclick="event.stopPropagation();DashboardModule.actions.deleteGroup(${g.id})" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </div>`).join('');
-                    
-                document.getElementById('content').innerHTML = html || '<div class="col-span-full text-center text-gray-400 mt-10">ยังไม่มีกลุ่มไฟล์</div>';
-                this.renderModal();
+            // ───────────────────────────────────────────────────
+            // INITIALIZATION: เริ่มต้นโปรแกรม
+            // ───────────────────────────────────────────────────
+            init() {
+                console.log('🚀 [File Manager] เริ่มต้นระบบ');
+                this.loadData();
+                this.render();
                 lucide.createIcons();
             },
             
-            renderModal() {
-                const root = document.getElementById('modal-root');
-                root.innerHTML = ''; 
-                root.className='fixed inset-0 z-50 pointer-events-none';
+            // ───────────────────────────────────────────────────
+            // DATA MANAGEMENT: จัดการข้อมูล
+            // ───────────────────────────────────────────────────
+            
+            /**
+             * โหลดข้อมูลจาก LocalStorage
+             */
+            loadData() {
+                this.state.groups = Core.Storage.get('myFileGroups', []);
+                this.state.categories = Core.Storage.get('myCategories', ['โปรเจกต์', 'HR', 'มีเดีย', 'ทั่วไป']);
                 
-                // --- 1. Form Modal ---
-                if(this.state.form.isOpen) {
-                    root.className='fixed inset-0 z-50 pointer-events-auto bg-black/60 backdrop-blur-sm flex items-center justify-center';
-                    const d = this.state.form.data;
-                    
-                    if(this.state.form.type === 'group') {
-                        root.innerHTML = `
-                        <div class="bg-white p-6 rounded-xl w-96 shadow-2xl">
-                            <h3 class="font-bold mb-4 text-lg">จัดการกลุ่มไฟล์</h3>
-                            <input class="border w-full p-2.5 rounded mb-4 focus:ring-2 focus:ring-blue-100 outline-none" placeholder="ชื่อกลุ่ม..." value="${d.title}" oninput="DashboardModule.state.form.data.title=this.value">
-                            <div class="flex gap-2">
-                                <button onclick="DashboardModule.state.form.isOpen=false;DashboardModule.renderModal()" class="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded">ยกเลิก</button>
-                                <button onclick="DashboardModule.actions.saveGroup()" class="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 shadow-lg">บันทึก</button>
-                            </div>
-                        </div>`;
-                    } else {
-                        // Item Form
-                        const isFile = d.sourceType==='file';
-                        root.innerHTML = `
-                        <div class="bg-white p-6 rounded-xl w-[400px] shadow-2xl">
-                            <h3 class="font-bold mb-4 text-lg">เพิ่ม${d.type==='folder'?'โฟลเดอร์':'ไฟล์'}</h3>
-                            <input class="border w-full p-2.5 rounded mb-4 focus:ring-2 focus:ring-blue-100 outline-none" placeholder="ชื่อเรียก..." value="${d.title}" oninput="DashboardModule.state.form.data.title=this.value">
-                            
-                            ${d.type === 'file' ? `
-                                <div class="flex gap-4 mb-4 bg-gray-50 p-2 rounded">
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="t" ${isFile?'checked':''} onchange="DashboardModule.state.form.data.sourceType='file';DashboardModule.renderModal()"> อัพโหลดไฟล์</label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="t" ${!isFile?'checked':''} onchange="DashboardModule.state.form.data.sourceType='link';DashboardModule.renderModal()"> ลิงก์ URL</label>
-                                </div>
-                                ${isFile ? `
-                                    <div class="mb-4">
-                                        <label class="block text-xs font-bold text-gray-500 mb-1">ไฟล์หลัก</label>
-                                        <input type="file" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" onchange="DashboardModule.actions.handleFile(this,'fileObj')">
-                                    </div>
-                                ` : `
-                                    <input class="border w-full p-2.5 rounded mb-4 text-sm font-mono" placeholder="https://..." value="${d.url}" oninput="DashboardModule.state.form.data.url=this.value">
-                                `}
-                                <div class="mb-4">
-                                    <label class="block text-xs font-bold text-gray-500 mb-1">รูปตัวอย่าง (Optional)</label>
-                                    <input type="file" accept="image/*" class="text-xs" onchange="DashboardModule.actions.handleFile(this,'previewObj')">
-                                    <img id="preview-img" class="h-20 mt-2 rounded border object-contain bg-gray-50">
-                                </div>
+                console.log(`📂 โหลดข้อมูล: ${this.state.groups.length} กลุ่ม`);
+            },
+            
+            /**
+             * บันทึกข้อมูลลง LocalStorage
+             */
+            saveData() {
+                Core.Storage.set('myFileGroups', this.state.groups);
+                Core.Storage.set('myCategories', this.state.categories);
+                
+                console.log('💾 บันทึกข้อมูลแล้ว');
+            },
+            
+            // ───────────────────────────────────────────────────
+            // RENDERING: แสดงผล UI
+            // ───────────────────────────────────────────────────
+            
+            /**
+             * วาดหน้าจอหลัก
+             */
+            render() {
+                const container = document.getElementById('content-area');
+                const query = this.state.searchQuery.toLowerCase();
+                
+                // กรองกลุ่มตามคำค้นหา
+                let displayGroups = this.state.groups;
+                if (query) {
+                    displayGroups = this.state.groups.filter(g => 
+                        g.title.toLowerCase().includes(query) || 
+                        (g.description && g.description.toLowerCase().includes(query))
+                    );
+                }
+                
+                // ถ้าไม่มีกลุ่ม
+                if (displayGroups.length === 0) {
+                    container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center h-full text-center">
+                            <i data-lucide="folder-x" class="w-20 h-20 text-gray-300 mb-4"></i>
+                            <h3 class="text-xl font-bold text-gray-700 mb-2">
+                                ${query ? 'ไม่พบผลลัพธ์' : 'ยังไม่มีกลุ่มไฟล์'}
+                            </h3>
+                            <p class="text-gray-500 mb-4">
+                                ${query ? 'ลองค้นหาด้วยคำอื่น' : 'เริ่มต้นด้วยการสร้างกลุ่มไฟล์แรก'}
+                            </p>
+                            ${!query ? `
+                                <button onclick="FileManager.openGroupDialog()" 
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium shadow-sm transition-all">
+                                    <i data-lucide="plus" class="w-4 h-4 inline"></i> สร้างกลุ่มใหม่
+                                </button>
                             ` : ''}
-                            
-                            <div class="flex gap-2 mt-6">
-                                <button onclick="DashboardModule.state.form.isOpen=false;DashboardModule.renderModal()" class="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded">ยกเลิก</button>
-                                <button onclick="DashboardModule.actions.saveItem()" class="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 shadow-lg">บันทึก</button>
-                            </div>
-                        </div>`;
-                    }
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    return;
                 }
                 
-                // --- 2. Viewer Modal ---
-                if(this.state.viewer.isOpen) {
-                    root.className='fixed inset-0 z-50 pointer-events-auto bg-slate-900/95 flex items-center justify-center p-4 md:p-8';
-                    const list = DashboardModule.getCurrentList();
-                    const activeFileId = this.state.viewer.activeFile ? this.state.viewer.activeFile.id : null;
-                    
-                    root.innerHTML = `
-                        <div class="bg-white w-full h-full max-w-6xl rounded-2xl flex flex-col overflow-hidden shadow-2xl">
-                            <!-- Viewer Header -->
-                            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
-                                <div class="flex items-center gap-2 overflow-hidden">
-                                    <h3 class="font-bold text-lg whitespace-nowrap">${this.state.viewer.group.title}</h3>
-                                    <div class="flex items-center text-gray-400 text-sm">
-                                        ${this.state.viewer.path.map(p=>`<i data-lucide="chevron-right" class="w-4 h-4 mx-1"></i> <span class="font-medium text-gray-600">${p.title}</span>`).join('')}
-                                    </div>
+                // แสดงกลุ่มทั้งหมด
+                const html = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${displayGroups.map(group => this.renderGroupCard(group)).join('')}
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+                lucide.createIcons();
+            },
+            
+            /**
+             * สร้าง HTML สำหรับการ์ดกลุ่มไฟล์
+             */
+            renderGroupCard(group) {
+                const categoryColors = {
+                    'โปรเจกต์': 'bg-blue-100 text-blue-700',
+                    'HR': 'bg-purple-100 text-purple-700',
+                    'มีเดีย': 'bg-pink-100 text-pink-700',
+                    'ทั่วไป': 'bg-gray-100 text-gray-700'
+                };
+                
+                const colorClass = categoryColors[group.category] || 'bg-gray-100 text-gray-700';
+                const itemCount = (group.items || []).length;
+                
+                return `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-all cursor-pointer group fade-in"
+                         onclick="FileManager.openGroupViewer('${group.id}')">
+                        <!-- Header -->
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                                <div class="w-12 h-12 ${colorClass} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                                    <i data-lucide="folder" class="w-6 h-6"></i>
                                 </div>
-                                <button onclick="DashboardModule.actions.closeViewer()" class="p-2 hover:bg-gray-200 rounded-full transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-bold text-gray-800 truncate text-lg">${this.escapeHtml(group.title)}</h3>
+                                    <span class="text-xs ${colorClass} px-2 py-0.5 rounded-full inline-block mt-1">
+                                        ${this.escapeHtml(group.category)}
+                                    </span>
+                                </div>
                             </div>
                             
-                            <!-- Viewer Body -->
-                            <div class="flex-1 flex overflow-hidden">
-                                <!-- Sidebar List -->
-                                <div class="w-1/3 md:w-1/4 border-r bg-white flex flex-col min-w-[250px]">
-                                    <div class="p-3 border-b flex gap-2 bg-gray-50/50">
-                                        <button onclick="DashboardModule.actions.openItemForm('folder')" class="flex-1 bg-white border hover:bg-gray-50 py-1.5 rounded text-xs font-bold text-gray-700 flex justify-center items-center gap-1"><i data-lucide="folder-plus" class="w-3 h-3"></i> โฟลเดอร์</button>
-                                        <button onclick="DashboardModule.actions.openItemForm('file')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded text-xs font-bold flex justify-center items-center gap-1"><i data-lucide="file-plus" class="w-3 h-3"></i> ไฟล์</button>
-                                    </div>
-                                    <div class="flex-1 overflow-y-auto p-2 space-y-1">
-                                        ${this.state.viewer.path.length>0 ? 
-                                            `<button onclick="DashboardModule.actions.navUp()" class="w-full text-left p-2 hover:bg-gray-100 rounded text-sm font-bold text-blue-600 flex items-center gap-2"><i data-lucide="arrow-left" class="w-4 h-4"></i> กลับ</button>` : ''}
-                                        
-                                        ${list.length === 0 ? '<div class="text-center text-gray-400 text-sm py-4">ว่างเปล่า</div>' : ''}
-                                        
-                                        ${list.map(i => {
-                                            const isActive = activeFileId === i.id;
-                                            return `
-                                            <div class="flex items-center justify-between p-2 rounded cursor-pointer group ${isActive ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}" 
-                                                onclick="${i.type==='folder'?'DashboardModule.actions.enterFolder('+i.id+')':'DashboardModule.actions.setActiveFile('+i.id+')'}">
-                                                <div class="flex items-center gap-2 truncate">
-                                                    <i data-lucide="${i.type==='folder'?'folder':(i.sourceType==='file'?'file':'link')}" class="w-4 h-4 ${i.type==='folder'?'text-yellow-500':'text-gray-400'}"></i> 
-                                                    <span class="text-sm font-medium truncate">${i.title}</span>
-                                                </div>
-                                                <button onclick="event.stopPropagation();DashboardModule.actions.deleteItem(${i.id})" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-                                            </div>`;
-                                        }).join('')}
-                                    </div>
+                            <!-- Action Menu -->
+                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onclick="event.stopPropagation(); FileManager.openGroupDialog('${group.id}')" 
+                                        class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-600" 
+                                        title="แก้ไข">
+                                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="event.stopPropagation(); FileManager.deleteGroup('${group.id}')" 
+                                        class="p-1.5 hover:bg-red-100 rounded-lg text-red-600" 
+                                        title="ลบ">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Description -->
+                        ${group.description ? `
+                            <p class="text-sm text-gray-500 mb-3 line-clamp-2">${this.escapeHtml(group.description)}</p>
+                        ` : ''}
+                        
+                        <!-- Stats -->
+                        <div class="flex items-center justify-between pt-3 border-t border-gray-100">
+                            <div class="flex items-center gap-1 text-sm text-gray-600">
+                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                                <span class="font-medium">${itemCount}</span>
+                                <span>รายการ</span>
+                            </div>
+                            <div class="flex items-center gap-1 text-blue-600 font-medium text-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span>เปิดดู</span>
+                                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            // ───────────────────────────────────────────────────
+            // GROUP DIALOG: ฟอร์มสร้าง/แก้ไขกลุ่ม
+            // ───────────────────────────────────────────────────
+            
+            /**
+             * เปิดฟอร์มสร้าง/แก้ไขกลุ่ม
+             */
+            openGroupDialog(groupId = null) {
+                const isEdit = !!groupId;
+                const group = isEdit 
+                    ? this.state.groups.find(g => g.id === groupId) 
+                    : { title: '', description: '', category: this.state.categories[0], items: [] };
+                
+                if (isEdit && !group) {
+                    alert('ไม่พบกลุ่มนี้');
+                    return;
+                }
+                
+                const modal = document.getElementById('modal-container');
+                modal.className = 'fixed inset-0 z-50 flex items-center justify-center modal-backdrop';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 fade-in" onclick="event.stopPropagation()">
+                        <!-- Header -->
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-xl font-bold text-gray-800">
+                                ${isEdit ? 'แก้ไขกลุ่มไฟล์' : 'สร้างกลุ่มไฟล์ใหม่'}
+                            </h3>
+                            <button onclick="FileManager.closeModal()" 
+                                    class="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Form -->
+                        <div class="space-y-4">
+                            <!-- ชื่อกลุ่ม -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    ชื่อกลุ่ม <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" 
+                                       id="group-title" 
+                                       value="${this.escapeHtml(group.title)}"
+                                       placeholder="เช่น โปรเจกต์ A, เอกสาร HR"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            </div>
+                            
+                            <!-- หมวดหมู่ -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    หมวดหมู่
+                                </label>
+                                <select id="group-category" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                    ${this.state.categories.map(cat => `
+                                        <option value="${cat}" ${cat === group.category ? 'selected' : ''}>
+                                            ${cat}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <!-- คำอธิบาย -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    คำอธิบาย
+                                </label>
+                                <textarea id="group-description" 
+                                          rows="3"
+                                          placeholder="อธิบายเพิ่มเติม..."
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none">${this.escapeHtml(group.description || '')}</textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="flex gap-2 mt-6">
+                            <button onclick="FileManager.closeModal()" 
+                                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+                                ยกเลิก
+                            </button>
+                            <button onclick="FileManager.saveGroup('${isEdit ? groupId : ''}')" 
+                                    class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                                ${isEdit ? 'บันทึก' : 'สร้างกลุ่ม'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                lucide.createIcons();
+                
+                // Focus ที่ช่องชื่อ
+                setTimeout(() => {
+                    document.getElementById('group-title').focus();
+                }, 100);
+            },
+            
+            /**
+             * บันทึกกลุ่ม
+             */
+            saveGroup(groupId) {
+                const title = document.getElementById('group-title').value.trim();
+                const category = document.getElementById('group-category').value;
+                const description = document.getElementById('group-description').value.trim();
+                
+                // Validation
+                if (!title) {
+                    alert('⚠️ กรุณากรอกชื่อกลุ่ม');
+                    document.getElementById('group-title').focus();
+                    return;
+                }
+                
+                const isEdit = !!groupId;
+                
+                if (isEdit) {
+                    // แก้ไขกลุ่มเดิม
+                    const index = this.state.groups.findIndex(g => g.id === groupId);
+                    if (index !== -1) {
+                        this.state.groups[index] = {
+                            ...this.state.groups[index],
+                            title,
+                            category,
+                            description
+                        };
+                        console.log('✏️ แก้ไขกลุ่ม:', title);
+                    }
+                } else {
+                    // สร้างกลุ่มใหม่
+                    const newGroup = {
+                        id: Core.Util.generateId('group_'),
+                        title,
+                        category,
+                        description,
+                        items: []
+                    };
+                    this.state.groups.push(newGroup);
+                    console.log('➕ สร้างกลุ่มใหม่:', title);
+                }
+                
+                // บันทึกและอัปเดต UI
+                this.saveData();
+                this.closeModal();
+                this.render();
+                
+                alert(`✅ ${isEdit ? 'แก้ไข' : 'สร้าง'}กลุ่ม "${title}" เรียบร้อยแล้ว`);
+            },
+            
+            /**
+             * ลบกลุ่ม
+             */
+            deleteGroup(groupId) {
+                const group = this.state.groups.find(g => g.id === groupId);
+                if (!group) return;
+                
+                const itemCount = (group.items || []).length;
+                const confirmMsg = itemCount > 0 
+                    ? `🗑️ ต้องการลบกลุ่ม "${group.title}" และไฟล์ทั้งหมด ${itemCount} รายการหรือไม่?`
+                    : `🗑️ ต้องการลบกลุ่ม "${group.title}" หรือไม่?`;
+                
+                if (!confirm(confirmMsg)) return;
+                
+                this.state.groups = this.state.groups.filter(g => g.id !== groupId);
+                this.saveData();
+                this.render();
+                
+                console.log('🗑️ ลบกลุ่ม:', group.title);
+                alert(`✅ ลบกลุ่ม "${group.title}" แล้ว`);
+            },
+            
+            // ───────────────────────────────────────────────────
+            // GROUP VIEWER: ดูไฟล์ในกลุ่ม
+            // ───────────────────────────────────────────────────
+            
+            /**
+             * เปิดหน้าดูไฟล์ในกลุ่ม
+             */
+            openGroupViewer(groupId) {
+                const group = this.state.groups.find(g => g.id === groupId);
+                if (!group) {
+                    alert('ไม่พบกลุ่มนี้');
+                    return;
+                }
+                
+                this.state.currentGroup = group;
+                
+                const modal = document.getElementById('modal-container');
+                modal.className = 'fixed inset-0 z-50 flex items-center justify-center modal-backdrop';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col fade-in" 
+                         onclick="event.stopPropagation()">
+                        <!-- Header -->
+                        <div class="p-6 border-b border-gray-200 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
+                                    <i data-lucide="folder-open" class="w-5 h-5"></i>
                                 </div>
-                                
-                                <!-- Preview Pane -->
-                                <div class="flex-1 bg-gray-50 flex items-center justify-center p-8 relative overflow-y-auto" id="preview-pane">
-                                    <div class="text-center">
-                                        <div class="bg-white p-4 rounded-full inline-block shadow-sm mb-4"><i data-lucide="eye" class="w-8 h-8 text-gray-300"></i></div>
-                                        <p class="text-gray-400">เลือกไฟล์เพื่อดูตัวอย่าง</p>
-                                    </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-800">${this.escapeHtml(group.title)}</h3>
+                                    <p class="text-sm text-gray-500">${group.items.length} รายการ</p>
                                 </div>
                             </div>
-                        </div>`;
+                            
+                            <button onclick="FileManager.closeModal()" 
+                                    class="p-2 hover:bg-gray-100 rounded-lg text-gray-500">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex gap-2">
+                            <button onclick="FileManager.addItem('file')" 
+                                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                                <i data-lucide="file-plus" class="w-4 h-4"></i>
+                                เพิ่มไฟล์
+                            </button>
+                            <button onclick="FileManager.addItem('folder')" 
+                                    class="flex items-center gap-2 px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors">
+                                <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                                สร้างโฟลเดอร์
+                            </button>
+                            <button onclick="FileManager.addItem('url')" 
+                                    class="flex items-center gap-2 px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors">
+                                <i data-lucide="link" class="w-4 h-4"></i>
+                                เพิ่ม Link
+                            </button>
+                        </div>
+                        
+                        <!-- File List -->
+                        <div class="flex-1 overflow-y-auto p-6">
+                            ${this.renderFileList(group.items)}
+                        </div>
+                    </div>
+                `;
+                
+                lucide.createIcons();
+            },
+            
+            /**
+             * แสดงรายการไฟล์
+             */
+            renderFileList(items) {
+                if (!items || items.length === 0) {
+                    return `
+                        <div class="flex flex-col items-center justify-center h-full text-center py-12">
+                            <i data-lucide="inbox" class="w-16 h-16 text-gray-300 mb-3"></i>
+                            <p class="text-gray-500">ยังไม่มีไฟล์ในกลุ่มนี้</p>
+                            <p class="text-sm text-gray-400">คลิกปุ่มด้านบนเพื่อเพิ่มไฟล์</p>
+                        </div>
+                    `;
                 }
+                
+                return `
+                    <div class="grid grid-cols-1 gap-2">
+                        ${items.map(item => this.renderFileItem(item)).join('')}
+                    </div>
+                `;
+            },
+            
+            /**
+             * แสดงรายการไฟล์แต่ละรายการ
+             */
+            renderFileItem(item) {
+                const icons = {
+                    'file': 'file-text',
+                    'folder': 'folder',
+                    'url': 'link'
+                };
+                
+                const colors = {
+                    'file': 'bg-blue-50 text-blue-600',
+                    'folder': 'bg-yellow-50 text-yellow-600',
+                    'url': 'bg-green-50 text-green-600'
+                };
+                
+                const icon = icons[item.type] || 'file';
+                const colorClass = colors[item.type] || 'bg-gray-50 text-gray-600';
+                
+                return `
+                    <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group">
+                        <div class="w-10 h-10 ${colorClass} rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i data-lucide="${icon}" class="w-5 h-5"></i>
+                        </div>
+                        
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-medium text-gray-800 truncate">${this.escapeHtml(item.title)}</h4>
+                            <p class="text-xs text-gray-500">${item.type === 'folder' ? 'โฟลเดอร์' : (item.type === 'url' ? 'ลิงก์' : 'ไฟล์')}</p>
+                        </div>
+                        
+                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="FileManager.deleteItem('${item.id}')" 
+                                    class="p-1.5 hover:bg-red-100 rounded-lg text-red-600" 
+                                    title="ลบ">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            /**
+             * เพิ่มไฟล์/โฟลเดอร์
+             */
+            addItem(type) {
+                const title = prompt(`ชื่อ${type === 'folder' ? 'โฟลเดอร์' : (type === 'url' ? 'ลิงก์' : 'ไฟล์')}:`);
+                if (!title || !title.trim()) return;
+                
+                let url = '';
+                if (type === 'url') {
+                    url = prompt('URL:');
+                    if (!url || !url.trim()) return;
+                }
+                
+                const newItem = {
+                    id: Core.Util.generateId('item_'),
+                    title: title.trim(),
+                    type: type,
+                    url: url,
+                    children: type === 'folder' ? [] : undefined
+                };
+                
+                this.state.currentGroup.items.push(newItem);
+                this.saveData();
+                this.openGroupViewer(this.state.currentGroup.id);
+                
+                console.log('➕ เพิ่มรายการ:', title);
+            },
+            
+            /**
+             * ลบไฟล์
+             */
+            deleteItem(itemId) {
+                if (!confirm('ต้องการลบรายการนี้หรือไม่?')) return;
+                
+                this.state.currentGroup.items = this.state.currentGroup.items.filter(i => i.id !== itemId);
+                this.saveData();
+                this.openGroupViewer(this.state.currentGroup.id);
+                
+                console.log('🗑️ ลบรายการ:', itemId);
+            },
+            
+            // ───────────────────────────────────────────────────
+            // UTILITIES
+            // ───────────────────────────────────────────────────
+            
+            /**
+             * ค้นหา
+             */
+            handleSearch(query) {
+                this.state.searchQuery = query;
+                this.render();
+            },
+            
+            /**
+             * ปิด Modal
+             */
+            closeModal() {
+                const modal = document.getElementById('modal-container');
+                modal.className = 'hidden';
+                modal.innerHTML = '';
+            },
+            
+            /**
+             * Escape HTML เพื่อป้องกัน XSS
+             */
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
             }
         };
-        window.onload = () => DashboardModule.init();
+        
+        // ═══════════════════════════════════════════════════════
+        // INITIALIZATION
+        // ═══════════════════════════════════════════════════════
+        window.addEventListener('DOMContentLoaded', () => {
+            FileManager.init();
+        });
     </script>
 </body>
 </html>

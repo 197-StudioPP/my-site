@@ -31,7 +31,8 @@
         /* ฟอนต์และสีพื้นหลังหลัก */
         body { 
             font-family: 'Prompt', sans-serif; 
-            background-color: #f3f4f6; 
+            background-color: #f3f4f6;
+            touch-action: pan-y pinch-zoom; /* รองรับ touch บนมือถือ */
         }
         
         /* ซ่อน Scrollbar ที่ไม่จำเป็น */
@@ -49,7 +50,8 @@
         }
         
         /* Hover effect สำหรับผลลัพธ์การค้นหา */
-        .search-result-item:hover { 
+        .search-result-item:hover,
+        .search-result-item:active { 
             background-color: #f1f5f9; 
         }
         
@@ -57,6 +59,59 @@
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* ═══════════════════════════════════════════════════════
+           MOBILE RESPONSIVE STYLES
+           ═══════════════════════════════════════════════════════ */
+        
+        /* Sidebar ซ่อนเมนูข้อความบนจอเล็ก */
+        @media (max-width: 1023px) {
+            aside {
+                width: 4rem !important; /* 64px */
+            }
+            
+            aside .hidden {
+                display: none !important;
+            }
+        }
+        
+        /* Header ปรับขนาดบนมือถือ */
+        @media (max-width: 768px) {
+            header {
+                height: auto !important;
+                min-height: 4rem;
+                flex-wrap: wrap;
+                padding: 0.75rem 1rem !important;
+            }
+            
+            #search-container {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0.5rem 0 0 0 !important;
+            }
+            
+            #global-search {
+                font-size: 14px;
+            }
+        }
+        
+        /* ปุ่มเมนูบนมือถือ - ทำให้กดง่ายขึ้น */
+        @media (max-width: 1023px) {
+            nav button {
+                min-height: 2.5rem;
+                justify-content: center;
+            }
+        }
+        
+        /* ป้องกันการ zoom เมื่อ double tap */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+        
+        input, textarea, select {
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
         }
     </style>
     
@@ -276,6 +331,7 @@
             }
         });
     </script>
+    <link rel="stylesheet" href="responsive.css">
 </head>
 
 <body class="h-screen flex overflow-hidden">

@@ -1,0 +1,363 @@
+/**
+ * ═══════════════════════════════════════════════════════════
+ * RESPONSIVE.CSS - สไตล์สำหรับรองรับมือถือ
+ * ═══════════════════════════════════════════════════════════
+ * 
+ * ใช้ไฟล์นี้ในทุกหน้าเพื่อให้แสดงผลดีบนมือถือ
+ * 
+ * วิธีใช้: <link rel="stylesheet" href="responsive.css">
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   BASE STYLES - สไตล์พื้นฐาน
+   ═══════════════════════════════════════════════════════════ */
+
+* {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    touch-action: pan-y pinch-zoom;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ป้องกัน zoom เมื่อ focus input บนมือถือ */
+input, 
+textarea, 
+select {
+    font-size: 16px !important;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+/* ทำให้ปุ่มทั้งหมดกดง่ายบนมือถือ (ขนาดขั้นต่ำ 44x44px ตาม iOS Guidelines) */
+button,
+a[role="button"],
+.btn {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABLET (768px - 1023px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 1023px) {
+    /* ลด padding ทั่วไป */
+    body {
+        padding: 1rem !important;
+    }
+    
+    /* ทำให้ container เต็มจอ */
+    .container,
+    .max-w-7xl,
+    .max-w-6xl,
+    .max-w-5xl {
+        max-width: 100% !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    /* Grid ให้เป็น 2 คอลัมน์ */
+    .grid-cols-3,
+    .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE (max-width: 768px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    /* ลด padding เพิ่มเติม */
+    body {
+        padding: 0.75rem !important;
+    }
+    
+    /* ทำให้ทุก grid เป็น 1 คอลัมน์ */
+    .grid {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem !important;
+    }
+    
+    /* ลดขนาดตัวอักษรหัวข้อ */
+    h1 {
+        font-size: 1.5rem !important;
+        line-height: 2rem !important;
+    }
+    
+    h2 {
+        font-size: 1.25rem !important;
+        line-height: 1.75rem !important;
+    }
+    
+    h3 {
+        font-size: 1.125rem !important;
+        line-height: 1.5rem !important;
+    }
+    
+    /* ปรับ spacing */
+    .gap-6 {
+        gap: 1rem !important;
+    }
+    
+    .gap-4 {
+        gap: 0.75rem !important;
+    }
+    
+    .p-6 {
+        padding: 1rem !important;
+    }
+    
+    .p-8 {
+        padding: 1.25rem !important;
+    }
+    
+    /* Modal ให้เต็มจอเกือบหมด */
+    .modal-backdrop > div,
+    .fixed > div {
+        max-width: calc(100vw - 1rem) !important;
+        margin: 0.5rem !important;
+        max-height: calc(100vh - 1rem) !important;
+    }
+    
+    /* Flex direction เป็น column */
+    .flex-row {
+        flex-direction: column !important;
+    }
+    
+    /* ทำให้ element ที่ซ่อนบนมือถือ */
+    .hidden-mobile {
+        display: none !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SMALL MOBILE (max-width: 480px)
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+    body {
+        padding: 0.5rem !important;
+        font-size: 14px;
+    }
+    
+    h1 {
+        font-size: 1.25rem !important;
+    }
+    
+    h2 {
+        font-size: 1.125rem !important;
+    }
+    
+    h3 {
+        font-size: 1rem !important;
+    }
+    
+    /* ลด padding ของการ์ดและ element ต่างๆ */
+    .p-5,
+    .p-6 {
+        padding: 0.75rem !important;
+    }
+    
+    .p-4 {
+        padding: 0.625rem !important;
+    }
+    
+    /* ทำให้ปุ่มใหญ่ขึ้น เพื่อกดง่าย */
+    button {
+        padding: 0.625rem 1rem !important;
+        font-size: 14px !important;
+    }
+    
+    /* Text ที่ยาวให้ตัดด้วย ... */
+    .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SPECIFIC COMPONENTS - ส่วนประกอบเฉพาะ
+   ═══════════════════════════════════════════════════════════ */
+
+/* Header / Navbar */
+@media (max-width: 768px) {
+    header,
+    .header {
+        flex-wrap: wrap !important;
+        height: auto !important;
+        min-height: 3.5rem !important;
+    }
+    
+    nav {
+        width: 100% !important;
+    }
+}
+
+/* Sidebar */
+@media (max-width: 1023px) {
+    aside,
+    .sidebar {
+        width: 4rem !important;
+        min-width: 4rem !important;
+    }
+    
+    aside span,
+    .sidebar span {
+        display: none !important;
+    }
+}
+
+/* Tables */
+@media (max-width: 768px) {
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    th, td {
+        font-size: 14px !important;
+        padding: 0.5rem !important;
+    }
+}
+
+/* Forms */
+@media (max-width: 768px) {
+    form {
+        width: 100% !important;
+    }
+    
+    .form-row {
+        flex-direction: column !important;
+    }
+    
+    label {
+        font-size: 14px !important;
+    }
+    
+    input,
+    select,
+    textarea {
+        width: 100% !important;
+    }
+}
+
+/* Cards */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 0.75rem !important;
+    }
+    
+    .card-body {
+        padding: 1rem !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITIES - ฟังก์ชันเสริม
+   ═══════════════════════════════════════════════════════════ */
+
+/* แสดงเฉพาะบนมือถือ */
+.show-mobile {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .show-mobile {
+        display: block !important;
+    }
+    
+    .hide-mobile {
+        display: none !important;
+    }
+}
+
+/* แสดงเฉพาะบน Desktop */
+@media (min-width: 769px) {
+    .show-desktop {
+        display: block !important;
+    }
+    
+    .hide-desktop {
+        display: none !important;
+    }
+}
+
+/* Full width บนมือถือ */
+@media (max-width: 768px) {
+    .mobile-full {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+/* Stack vertically บนมือถือ */
+@media (max-width: 768px) {
+    .mobile-stack {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+    }
+    
+    .mobile-stack > * {
+        width: 100% !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LANDSCAPE MODE - โหมดแนวนอนบนมือถือ
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+    body {
+        padding: 0.5rem !important;
+    }
+    
+    h1, h2, h3 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .p-6, .p-8 {
+        padding: 0.75rem !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PRINT STYLES - สำหรับการพิมพ์
+   ═══════════════════════════════════════════════════════════ */
+
+@media print {
+    aside,
+    .sidebar,
+    nav,
+    button,
+    .no-print {
+        display: none !important;
+    }
+    
+    body {
+        padding: 0 !important;
+        background: white !important;
+    }
+    
+    * {
+        color: black !important;
+        background: white !important;
+    }
+}
