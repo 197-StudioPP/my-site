@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Tools</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Prompt', sans-serif; background-color: #f9fafb; }</style>
+</head>
+<body class="h-screen flex flex-col p-6 overflow-hidden">
+    <div class="flex justify-between items-center mb-6 flex-shrink-0">
+        <h2 class="text-2xl font-bold text-gray-800">เครื่องมือ (Tools)</h2>
+        <div class="flex bg-gray-200 p-1 rounded-lg">
+            <button onclick="ToolsModule.switchTab('calc')" id="tab-calc" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all">เครื่องคิดเลข</button>
+            <button onclick="ToolsModule.switchTab('conv')" id="tab-conv" class="px-4 py-1.5 rounded-md text-sm font-medium transition-all">ตัวแปลงหน่วย</button>
+        </div>
+    </div>
+    
+    <div id="content" class="flex-1 overflow-y-auto"></div>
+
+    <script>
+        const ToolsModule = {
+            state: { tab: 'calc', display: '0' },
+            
+            init() { this.render(); },
+            switchTab(t) { this.state.tab = t; this.render(); },
+            
+            calc(val) {
+                if(val === '=') {
+                    try { this.state.display = eval(this.state.display.replace('x','*')) || '0'; } 
+                    catch { this.state.display = 'Error'; }
+                } else if(val === 'C') {
+                    this.state.display = '0';
+                } else {
+                    this.state.display = this.state.display === '0' ? val : this.state.display + val;
+                }
+                this.render();
+            },
+
+            convertLength(unit, val) {
+                const v = parseFloat(val); if(isNaN(v)) return;
+                const m = unit === 'm' ? v : (unit === 'ft' ? v/3.28084 : v/100);
+                if(unit!=='m') document.getElementById('c_m').value = m.toFixed(4);
+                if(unit!=='ft') document.getElementById('c_ft').value = (m*3.28084).toFixed(4);
+                if(unit!=='cm') document.getElementById('c_cm').value = (m*100).toFixed(4);
+            },
+
+            render() {
+                const isCalc = this.state.tab === 'calc';
+                
+                // Update Tabs
+                document.getElementById('tab-calc').className = isCalc ? 'px-4 py-1.5 rounded-md text-sm font-bold bg-white text-blue-600 shadow-sm' : 'px-4 py-1.5 rounded-md text-sm font-medium text-gray-600';
+                document.getElementById('tab-conv').className = !isCalc ? 'px-4 py-1.5 rounded-md text-sm font-bold bg-white text-blue-600 shadow-sm' : 'px-4 py-1.5 rounded-md text-sm font-medium text-gray-600';
+                
+                const container = document.getElementById('content');
+                if(isCalc) {
+                    container.innerHTML = `
+                        <div class="max-w-sm mx-auto bg-gray-900 rounded-2xl p-6 shadow-2xl">
+                            <div class="bg-gray-800 h-16 rounded-xl mb-4 flex items-center justify-end px-4 text-white text-3xl font-mono overflow-hidden">${this.state.display}</div>
+                            <div class="grid grid-cols-4 gap-3">
+                                ${['7','8','9','/','4','5','6','*','1','2','3','-','C','0','=','+'].map(btn => `
+                                    <button onclick="ToolsModule.calc('${btn}')" class="h-12 rounded-lg font-bold text-xl transition-transform active:scale-95 ${btn==='='?'bg-blue-600 text-white col-span-1':(btn==='C'?'bg-red-500 text-white':'bg-gray-700 text-gray-200 hover:bg-gray-600')}">${btn}</button>
+                                `).join('')}
+                            </div>
+                        </div>`;
+                } else {
+                    container.innerHTML = `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                            <div class="bg-white p-6 rounded-xl shadow-sm border">
+                                <h3 class="font-bold mb-4 flex items-center gap-2"><i data-lucide="ruler" class="w-4 h-4"></i> ความยาว (Length)</h3>
+                                <div class="space-y-3">
+                                    <div><label class="text-xs text-gray-500">Meters (m)</label><input id="c_m" type="number" class="w-full border rounded p-2" oninput="ToolsModule.convertLength('m',this.value)"></div>
+                                    <div><label class="text-xs text-gray-500">Feet (ft)</label><input id="c_ft" type="number" class="w-full border rounded p-2" oninput="ToolsModule.convertLength('ft',this.value)"></div>
+                                    <div><label class="text-xs text-gray-500">Centimeters (cm)</label><input id="c_cm" type="number" class="w-full border rounded p-2" oninput="ToolsModule.convertLength('cm',this.value)"></div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                lucide.createIcons();
+            }
+        };
+        window.onload = () => ToolsModule.init();
+    </script>
+</body>
+</html>

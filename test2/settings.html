@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="core.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:'Prompt',sans-serif;background-color:#f9fafb;}</style>
+</head>
+<body class="h-screen p-6 overflow-y-auto">
+    <div class="max-w-3xl mx-auto pb-10">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <i data-lucide="settings" class="w-6 h-6"></i> ตั้งค่าระบบ
+        </h2>
+        
+        <!-- 1. Backup & Restore (Priority) -->
+        <div class="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden mb-6">
+            <div class="p-4 border-b border-blue-100 bg-blue-50 flex items-center gap-2">
+                <i data-lucide="database" class="w-5 h-5 text-blue-600"></i> 
+                <h3 class="font-bold text-blue-900">จัดการข้อมูล (Backup & Restore)</h3>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-600 mb-4">ดาวน์โหลดไฟล์ .json เพื่อสำรองข้อมูล หรือนำเข้าไฟล์ Backup เพื่อกู้คืนข้อมูลเดิม</p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button onclick="backupData()" class="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm transition-all hover:scale-[1.02]">
+                        <i data-lucide="download" class="w-5 h-5"></i> 
+                        <div>
+                            <div class="text-sm font-bold">Backup ข้อมูล</div>
+                            <div class="text-[10px] opacity-80 font-light">Export to JSON</div>
+                        </div>
+                    </button>
+                    <label class="flex-1 bg-white border-2 border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:border-blue-500 hover:text-blue-600 flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all hover:scale-[1.02] relative">
+                        <input type="file" accept=".json" class="hidden" onchange="importData(this)">
+                        <i data-lucide="upload" class="w-5 h-5"></i>
+                        <div>
+                            <div class="text-sm font-bold">Import ข้อมูล</div>
+                            <div class="text-[10px] opacity-60 font-light">Restore from JSON</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Factory Reset -->
+        <div class="text-center pt-8 border-t border-gray-200">
+            <button onclick="if(confirm('คำเตือน: ข้อมูลทั้งหมดจะหายไปถาวร\nคุณแน่ใจหรือไม่?')){localStorage.clear(); Core.DB.clearAll(); location.reload();}" class="text-red-500 text-sm hover:text-red-700 hover:underline flex items-center justify-center gap-1 mx-auto">
+                <i data-lucide="alert-triangle" class="w-4 h-4"></i> ล้างข้อมูลทั้งหมด (Factory Reset)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Specific Keys based on EngineeringWorkspace_Backup_2026-01-19.json
+        const LS_KEYS = [
+            'myCategories',
+            'myFileGroups',
+            'myNotes',
+            'myTasksV5',
+            'myProjectsV5',
+            'myTaskStatuses'
+            // Added keys just in case
+            , 'myQuickTodos', 'myTodoGroups'
+        ];
+
+        async function backupData() {
+            try {
+                // 1. Gather LocalStorage
+                const exportData = {
+                    meta: { date: new Date().toISOString(), version: 'v5.3' },
+                    localStorage: {},
+                    indexedDB: []
+                };
+                
+                LS_KEYS.forEach(k => {
+                    const val = localStorage.getItem(k);
+                    if (val) {
+                        try { exportData.localStorage[k] = JSON.parse(val); } catch(e){}
+                    }
+                });
+
+                // 2. Gather IndexedDB (Files) - Only if DB exists
+                const db = await Core.DB.init();
+                if(db) {
+                     const tx = db.transaction(['files'], 'readonly');
+                     const store = tx.objectStore('files');
+                     const request = store.getAll();
+                     
+                     await new Promise((resolve) => {
+                         request.onsuccess = async () => {
+                             const records = request.result;
+                             for (const rec of records) {
+                                 // Convert Blob to Base64 for JSON export
+                                 const fileB64 = rec.fileBlob ? await blobToBase64(rec.fileBlob) : null;
+                                 const previewB64 = rec.previewBlob ? await blobToBase64(rec.previewBlob) : null;
+                                 exportData.indexedDB.push({ 
+                                     id: rec.id, 
+                                     fileData: fileB64, 
+                                     previewData: previewB64, 
+                                     created: rec.created 
+                                 });
+                             }
+                             resolve();
+                         };
+                         request.onerror = () => resolve();
+                     });
+                }
+
+                // 3. Download
+                const blob = new Blob([JSON.stringify(exportData)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `EngineeringWorkspace_Backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                alert('Backup สำเร็จ!');
+
+            } catch (e) {
+                console.error(e);
+                alert('Backup ล้มเหลว: ' + e.message);
+            }
+        }
+
+        async function importData(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            if(!confirm('⚠️ ข้อมูลปัจจุบันจะถูกทับด้วยข้อมูลจาก Backup\nยืนยันหรือไม่?')) { 
+                input.value = ''; 
+                return; 
+            }
+            
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                // --- Restore LocalStorage ---
+                if (data.localStorage) {
+                    LS_KEYS.forEach(k => {
+                        if (data.localStorage[k] !== undefined) {
+                            localStorage.setItem(k, JSON.stringify(data.localStorage[k]));
+                        }
+                    });
+                }
+
+                // --- Restore IndexedDB ---
+                if (data.indexedDB && Array.isArray(data.indexedDB)) {
+                    await Core.DB.clearAll();
+                    for (const rec of data.indexedDB) {
+                        const fileBlob = rec.fileData ? await base64ToBlob(rec.fileData) : null;
+                        const previewBlob = rec.previewData ? await base64ToBlob(rec.previewData) : null;
+                        await Core.DB.saveFile(rec.id, fileBlob, previewBlob);
+                    }
+                }
+
+                alert('✅ นำเข้าข้อมูลสำเร็จ! ระบบจะรีโหลด');
+                if (window.parent) window.parent.location.reload();
+                else window.location.reload();
+                
+            } catch (e) {
+                alert('Import Failed: ไฟล์อาจเสียหายหรือรูปแบบไม่ถูกต้อง');
+                console.error(e);
+            }
+        }
+
+        // Helpers for Blob <-> Base64
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+        async function base64ToBlob(base64) {
+            const res = await fetch(base64);
+            return await res.blob();
+        }
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>

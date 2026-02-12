@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engineering Workspace Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- EMBEDDED CORE.JS to fix ReferenceError in isolated environments -->
+    <script>
+    /* Core utilities for Engineering Workspace (Centralized Logic & Communication) */
+    (function () {
+        const Core = (window.Core = window.Core || {});
+
+        // --- 0. Event Bus (Real-time Communication) ---
+        const bus = new BroadcastChannel('eng_workspace_channel');
+        
+        Core.Bus = {
+            emit(event, data) {
+                bus.postMessage({ event, data });
+            },
+            on(event, callback) {
+                bus.addEventListener('message', (e) => {
+                    if (e.data && e.data.event === event) {
+                        callback(e.data.data);
+                    }
+                });
+            }
+        };
+
+        // --- 1. LocalStorage Wrapper ---
+        Core.Storage = {
+            get(key, fallback = null) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (!raw || raw === "undefined" || raw === "null") return fallback;
+                    return JSON.parse(raw);
+                } catch (e) {
+                    console.error(`Storage Read Error [${key}]:`, e);
+                    return fallback;
+                }
+            },
+            set(key, value, notifyEvent = null) {
+                try {
+                    const stringVal = JSON.stringify(value);
+                    localStorage.setItem(key, stringVal);
+                    // Auto Emit Event if requested
+                    if (notifyEvent) {
+                        Core.Bus.emit(notifyEvent, value);
+                    }
+                } catch (e) {
+                    console.error(`Storage Write Error [${key}]:`, e);
+                    if (e.name === 'QuotaExceededError') {
+                        alert("เมมโมรี่เต็ม! (LocalStorage Full)\nกรุณาลบข้อมูลเก่าหรือ Backup ข้อมูลออกไปก่อน");
+                    }
+                }
+            },
+            remove(key) {
+                localStorage.removeItem(key);
+            }
+        };
+
+        // --- 2. Global Search Logic (Simplified for Home) ---
+        Core.Search = {
+            execute(query) {
+                // Logic implemented here for completeness, primarily used by Index.html
+                return []; 
+            }
+        };
+
+        // --- 3. Utility Helpers ---
+        Core.Util = {
+            generateId: (prefix = '') => prefix + Date.now() + Math.floor(Math.random() * 1000),
+            todayISO: () => {
+                const d = new Date();
+                return new Date(d.getTime() - (d.getTimezoneOffset()*60000)).toISOString().split('T')[0];
+            },
+            navigate: (page, title) => {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ action: 'navigate', page, title }, '*');
+                } else {
+                    window.location.href = page;
+                }
+            }
+        };
+    })();
+    </script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body{font-family:'Prompt',sans-serif;background-color:#f8fafc;}
+        .workload-scroll::-webkit-scrollbar { height: 8px; }
+        .workload-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 2px solid #fff; }
+        .workload-scroll::-webkit-scrollbar-track { background: transparent; }
+        .modal-scroll::-webkit-scrollbar { width: 6px; }
+        .modal-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        #modal-root { display: none; }
+        #modal-root.active { display: flex; }
+    </style>
+</head>
+<body class="p-6 md:p-8 min-h-screen flex flex-col max-w-7xl mx-auto">
+    
+    <!-- Header -->
+    <header class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="text-blue-600"></i> ศูนย์ควบคุม (Command Center)
+            </h1>
+            <p class="text-slate-500 mt-1 text-sm">วิเคราะห์ภาระงานจาก Timeline และ To-Do List ในที่เดียว</p>
+        </div>
+        <div class="flex items-center gap-4 bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200">
+            <div class="text-right">
+                <div class="text-2xl font-bold text-blue-600 font-mono leading-none" id="clock-time">--:--</div>
+                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider" id="clock-date">...</div>
+            </div>
+            <i data-lucide="clock" class="w-8 h-8 text-slate-200"></i>
+        </div>
+    </header>
+    
+    <!-- 1. Stats Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div onclick="Core.Util.navigate('tasks.html','Timeline')" class="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 cursor-pointer card-hover transition-all group relative overflow-hidden">
+            <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><i data-lucide="calendar-range" class="w-32 h-32 text-blue-600"></i></div>
+            <div class="relative z-10">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="calendar" class="w-5 h-5"></i></span>
+                    <span class="text-sm font-bold text-slate-600">Timeline (Plan)</span>
+                </div>
+                <div class="text-4xl font-bold text-slate-800" id="count-tasks">0</div>
+                <div class="text-xs text-slate-400 mt-1">งานโครงการทั้งหมด</div>
+            </div>
+        </div>
+        <div onclick="Core.Util.navigate('todo.html','To-Do')" class="bg-white p-6 rounded-2xl shadow-sm border border-orange-100 cursor-pointer card-hover transition-all group relative overflow-hidden">
+            <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><i data-lucide="check-square" class="w-32 h-32 text-orange-600"></i></div>
+            <div class="relative z-10">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="p-2 bg-orange-50 text-orange-600 rounded-lg"><i data-lucide="list-todo" class="w-5 h-5"></i></span>
+                    <span class="text-sm font-bold text-slate-600">To-Do List</span>
+                </div>
+                <div class="text-4xl font-bold text-slate-800" id="count-todos">0</div>
+                <div class="text-xs text-slate-400 mt-1">รายการที่ต้องทำทั้งหมด</div>
+            </div>
+        </div>
+        <div onclick="Core.Util.navigate('dashboard.html','Files')" class="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 cursor-pointer card-hover transition-all group relative overflow-hidden">
+            <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><i data-lucide="folder-open" class="w-32 h-32 text-emerald-600"></i></div>
+            <div class="relative z-10">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><i data-lucide="folder" class="w-5 h-5"></i></span>
+                    <span class="text-sm font-bold text-slate-600">Documents</span>
+                </div>
+                <div class="text-4xl font-bold text-slate-800" id="count-files">0</div>
+                <div class="text-xs text-slate-400 mt-1">กลุ่มไฟล์เอกสาร</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Workload Monitor -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8 animate-[fadeIn_0.5s_ease-out]">
+        <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="bar-chart-2" class="text-indigo-600"></i> ตรวจสอบภาระงาน (Workload Monitor)
+                </h3>
+                <div id="sync-status" class="text-xs text-green-600 mt-1 hidden font-bold items-center gap-1"><i data-lucide="refresh-cw" class="w-3 h-3 animate-spin"></i> ข้อมูลอัปเดตล่าสุด...</div>
+            </div>
+            
+            <div class="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                <input type="date" id="filter-start" class="bg-transparent text-xs font-bold text-slate-600 outline-none px-2 py-1 cursor-pointer">
+                <i data-lucide="arrow-right" class="w-3 h-3 text-slate-400"></i>
+                <input type="date" id="filter-end" class="bg-transparent text-xs font-bold text-slate-600 outline-none px-2 py-1 cursor-pointer">
+                <button onclick="Home.renderWorkload()" class="bg-indigo-600 hover:bg-indigo-700 text-white p-1.5 rounded shadow-sm transition-colors">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6 bg-slate-50/50 overflow-x-auto workload-scroll">
+            <div id="workload-container" class="flex gap-4 min-w-max pb-2"></div>
+        </div>
+        
+        <div class="px-6 py-3 bg-white border-t border-slate-100 flex justify-end gap-4 text-xs font-bold text-slate-500">
+            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> ว่าง/เบา (0-2)</div>
+            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-orange-500"></div> ปานกลาง (3-5)</div>
+            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div> หนัก/ล้น (6+)</div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">เมนูลัด</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pb-10">
+        <button onclick="Core.Util.navigate('tasks.html','Timeline')" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all group">
+            <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><i data-lucide="plus"></i></div>
+            <span class="text-sm font-bold text-slate-600 group-hover:text-blue-600">เพิ่มงาน Timeline</span>
+        </button>
+        <button onclick="Core.Util.navigate('todo.html','To-Do')" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:border-orange-300 hover:shadow-md transition-all group">
+            <div class="w-10 h-10 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><i data-lucide="check"></i></div>
+            <span class="text-sm font-bold text-slate-600 group-hover:text-orange-600">จด To-Do</span>
+        </button>
+        <button onclick="Core.Util.navigate('notes.html','Notes')" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:border-purple-300 hover:shadow-md transition-all group">
+            <div class="w-10 h-10 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><i data-lucide="pen-tool"></i></div>
+            <span class="text-sm font-bold text-slate-600 group-hover:text-purple-600">สมุดโน้ต</span>
+        </button>
+        <button onclick="Core.Util.navigate('settings.html','Settings')" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-xl hover:border-slate-400 hover:shadow-md transition-all group">
+            <div class="w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><i data-lucide="save"></i></div>
+            <span class="text-sm font-bold text-slate-600 group-hover:text-slate-800">Backup ข้อมูล</span>
+        </button>
+    </div>
+
+    <!-- Modal Popup for Day Details -->
+    <div id="modal-root" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4"></div>
+
+    <script>
+        const Home = {
+            data: { tasks: [], todos: [], files: [], projects: [] },
+
+            init() {
+                this.loadData();
+                this.updateClock();
+                setInterval(() => this.updateClock(), 60000);
+
+                const todayISO = Core.Util.todayISO();
+                const next14Days = new Date(); next14Days.setDate(new Date().getDate() + 14);
+                
+                document.getElementById('filter-start').value = todayISO;
+                document.getElementById('filter-end').value = next14Days.toISOString().split('T')[0];
+                
+                this.renderWorkload();
+                
+                // --- REACTIVE LISTENER ---
+                // เมื่อหน้าอื่นมีการ Save ข้อมูล ให้หน้านี้โหลดข้อมูลใหม่ทันที
+                if (Core.Bus) {
+                    Core.Bus.on('data_updated', (type) => {
+                        this.showSyncStatus();
+                        this.loadData();
+                        this.renderWorkload();
+                    });
+                    
+                    Core.Bus.on('files_updated', () => {
+                        this.showSyncStatus();
+                        this.loadData();
+                    });
+                }
+            },
+            
+            showSyncStatus() {
+                const el = document.getElementById('sync-status');
+                if(el) {
+                    el.classList.remove('hidden');
+                    el.classList.add('flex');
+                    setTimeout(() => { el.classList.add('hidden'); el.classList.remove('flex'); }, 2000);
+                }
+            },
+
+            loadData() {
+                // Now using embedded Core
+                this.data.tasks = Core.Storage.get('myTasksV5', []);
+                this.data.todos = Core.Storage.get('myQuickTodos', []);
+                this.data.files = Core.Storage.get('myFileGroups', []);
+                this.data.projects = Core.Storage.get('myProjectsV5', [{id:'default', title:'General', color:'#64748b'}]);
+
+                const elTasks = document.getElementById('count-tasks');
+                const elTodos = document.getElementById('count-todos');
+                const elFiles = document.getElementById('count-files');
+
+                if(elTasks) elTasks.innerText = this.data.tasks.length;
+                if(elTodos) elTodos.innerText = this.data.todos.filter(t => !t.completed).length;
+                if(elFiles) elFiles.innerText = this.data.files.length;
+            },
+
+            updateClock() {
+                const now = new Date();
+                const elTime = document.getElementById('clock-time');
+                const elDate = document.getElementById('clock-date');
+                if(elTime) elTime.innerText = now.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'});
+                if(elDate) elDate.innerText = now.toLocaleDateString('th-TH', {weekday:'short', day:'numeric', month:'short'});
+            },
+
+            openDayDetails(dateISO) {
+                const root = document.getElementById('modal-root');
+                root.classList.add('active');
+                
+                const localToday = Core.Util.todayISO();
+                const isToday = dateISO === localToday;
+                const d = new Date(dateISO);
+                const dayName = d.toLocaleDateString('th-TH', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+                const dayNumStr = d.getDay().toString();
+
+                const timelineTasks = this.data.tasks.filter(t => {
+                    const isRoutine = t.isRoutine && (t.routineDay === 'daily' || t.routineDay === dayNumStr);
+                    const isRegular = !t.isRoutine && t.planStart && t.planEnd && dateISO >= t.planStart && dateISO <= t.planEnd;
+                    return isRoutine || isRegular;
+                });
+
+                const todoTasks = this.data.todos.filter(t => {
+                    if (t.completed) return false;
+                    return isToday ? t.date <= dateISO : t.date === dateISO;
+                });
+
+                let listHtml = '';
+                if(timelineTasks.length > 0) {
+                    listHtml += `<div class="mb-4"><h4 class="text-xs font-bold text-blue-600 uppercase mb-2 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i> Timeline & Routine</h4><div class="space-y-2">`;
+                    timelineTasks.forEach(t => {
+                        const proj = this.data.projects.find(p=>p.id===t.projectId) || {title:'Unknown', color:'#ccc'};
+                        listHtml += `<div class="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex items-start gap-3"><div class="w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0" style="background:${proj.color}"></div><div><div class="font-bold text-sm text-slate-800">${t.title}</div><div class="text-xs text-slate-500 mt-0.5">${proj.title}</div></div></div>`;
+                    });
+                    listHtml += `</div></div>`;
+                }
+
+                if(todoTasks.length > 0) {
+                    listHtml += `<div><h4 class="text-xs font-bold text-orange-600 uppercase mb-2 flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i> To-Do List</h4><div class="space-y-2">`;
+                    todoTasks.forEach(t => {
+                        listHtml += `<div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-start gap-3"><i data-lucide="circle" class="w-4 h-4 text-slate-300 mt-0.5"></i><div><div class="font-bold text-sm text-slate-800">${t.title}</div><div class="text-xs text-slate-400 mt-0.5">${t.remark||'-'}</div></div></div>`;
+                    });
+                    listHtml += `</div></div>`;
+                }
+
+                if(!timelineTasks.length && !todoTasks.length) listHtml = `<div class="text-center text-slate-400 py-10">ไม่มีงาน</div>`;
+
+                root.innerHTML = `
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[scaleIn_0.2s_ease-out] flex flex-col max-h-[80vh]">
+                    <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div><div class="text-xs font-bold text-slate-400 uppercase tracking-wider">รายละเอียด</div><h3 class="font-bold text-lg text-slate-800">${dayName}</h3></div>
+                        <button onclick="document.getElementById('modal-root').classList.remove('active')" class="p-2 hover:bg-slate-200 rounded-full text-slate-500"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                    <div class="p-6 overflow-y-auto modal-scroll">${listHtml}</div>
+                </div>`;
+                lucide.createIcons();
+            },
+
+            renderWorkload() {
+                const sDate = document.getElementById('filter-start').value;
+                const eDate = document.getElementById('filter-end').value;
+                if(!sDate || !eDate) return;
+                const start = new Date(sDate); const end = new Date(eDate);
+                let html = '';
+                const localToday = Core.Util.todayISO();
+
+                for(let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const isoDate = d.toISOString().split('T')[0];
+                    const dayName = d.toLocaleDateString('th-TH', {weekday:'short'});
+                    const dateNum = d.getDate();
+                    const dayNumStr = d.getDay().toString();
+                    const isToday = isoDate === localToday;
+
+                    const regularTasks = this.data.tasks.filter(t => !t.isRoutine && t.planStart && t.planEnd && isoDate >= t.planStart && isoDate <= t.planEnd).length;
+                    const routineTasks = this.data.tasks.filter(t => t.isRoutine && (t.routineDay === 'daily' || t.routineDay === dayNumStr)).length;
+                    
+                    let todoTasks = 0;
+                    if (isToday) todoTasks = this.data.todos.filter(t => (!t.completed) && (t.date <= isoDate)).length;
+                    else todoTasks = this.data.todos.filter(t => (!t.completed) && (t.date === isoDate)).length;
+
+                    const totalLoad = regularTasks + routineTasks + todoTasks;
+                    let statusClass = totalLoad >= 6 ? 'text-red-700' : (totalLoad >= 3 ? 'text-orange-700' : 'text-slate-400');
+                    let barColor = totalLoad >= 6 ? 'bg-red-500' : (totalLoad >= 3 ? 'bg-orange-500' : 'bg-slate-300');
+                    let borderClass = isToday ? 'border-blue-500 ring-2 ring-blue-100 shadow-md scale-105 z-10' : 'border-slate-200 shadow-sm';
+
+                    html += `
+                    <div onclick="Home.openDayDetails('${isoDate}')" class="flex-shrink-0 w-36 bg-white rounded-xl border ${borderClass} overflow-hidden transition-all hover:shadow-lg flex flex-col cursor-pointer group">
+                        <div class="p-2 text-center border-b ${isToday ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600'}">
+                            <div class="text-[10px] font-medium opacity-80 uppercase">${dayName}</div>
+                            <div class="text-xl font-bold leading-none mt-0.5">${dateNum}</div>
+                        </div>
+                        <div class="p-3 flex-1 flex flex-col justify-between gap-3">
+                            <div class="space-y-1.5">
+                                <div class="flex justify-between items-center text-xs"><span class="text-slate-500 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i> Plan</span><span class="font-bold text-slate-700">${regularTasks+routineTasks}</span></div>
+                                <div class="flex justify-between items-center text-xs"><span class="text-slate-500 flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i> Do</span><span class="font-bold text-slate-700">${todoTasks}</span></div>
+                            </div>
+                            <div class="mt-auto">
+                                <div class="flex justify-between items-end mb-1"><span class="text-[9px] font-bold text-slate-400 uppercase">Load</span><span class="text-sm font-bold ${statusClass}">${totalLoad}</span></div>
+                                <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full ${barColor} transition-all duration-500" style="width: ${Math.min((totalLoad/8)*100, 100)}%"></div></div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                document.getElementById('workload-container').innerHTML = html;
+                lucide.createIcons();
+            }
+        };
+
+        window.onload = () => Home.init();
+    </script>
+</body>
+</html>

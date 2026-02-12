@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- SYSTEM CORE -->
+    <script>
+    (function () {
+        const Core = (window.Core = window.Core || {});
+        const bus = new BroadcastChannel('eng_workspace_channel');
+        Core.Bus = { emit(e, d) { bus.postMessage({ event: e, data: d }); }, on(e, cb) { bus.addEventListener('message', (ev) => { if (ev.data?.event === e) cb(ev.data.data); }); } };
+        Core.Storage = { get(k, d=null) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }, set(k, v, n) { localStorage.setItem(k, JSON.stringify(v)); if (n) Core.Bus.emit(n, v); } };
+        Core.Util = { 
+            generateId: () => Date.now().toString(36) + Math.random().toString(36).substr(2), 
+            todayISO: () => new Date(new Date().getTime() - (new Date().getTimezoneOffset()*60000)).toISOString().split('T')[0] 
+        };
+    })();
+    </script>
+
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #f8fafc; overflow: hidden; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        #modal-root { display: none; }
+        #modal-root.active { display: flex; }
+        .card-hover:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        
+        /* Filter Styles */
+        .filter-select {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.75rem;
+            color: #475569;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            max-width: 140px;
+        }
+        .filter-select:hover { border-color: #cbd5e1; }
+        .filter-select:focus { ring: 2px solid #fed7aa; border-color: #f97316; }
+    </style>
+</head>
+<body class="h-screen flex flex-col p-4 md:p-6 overflow-hidden">
+
+    <!-- Header & Controls -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col mb-4 flex-shrink-0 z-50">
+        <div class="px-5 py-4 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-gray-100">
+            <div class="flex-1">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <i data-lucide="check-square" class="w-6 h-6 text-orange-500"></i> รายการสิ่งที่ต้องทำ (To-Do)
+                </h2>
+                <!-- Stats Row -->
+                <div class="flex gap-3 mt-1 text-xs text-gray-500">
+                    <span id="stat-pending">รอ: 0</span> | 
+                    <span id="stat-process" class="text-blue-600">ทำ: 0</span> |
+                    <span id="stat-delay" class="text-red-500">ช้า: 0</span> |
+                    <span id="stat-done" class="text-green-600">เสร็จ: 0</span>
+                </div>
+            </div>
+            
+            <!-- Filters & Actions -->
+            <div class="flex flex-wrap gap-2 items-center justify-end w-full md:w-auto">
+                <div class="flex items-center gap-2 mr-2 bg-gray-50 p-1 rounded-lg border border-gray-100 overflow-x-auto max-w-[50vw]">
+                    <i data-lucide="filter" class="w-3 h-3 text-gray-400 ml-1 flex-shrink-0"></i>
+                    
+                    <!-- NEW: Separated Group Filters -->
+                    <div class="flex gap-1">
+                        <select id="filter-group-main" class="filter-select w-32" onchange="TodoModule.actions.setFilter('group-main', this.value)">
+                            <option value="all">กลุ่มหลักทั้งหมด</option>
+                            <!-- Populated by JS -->
+                        </select>
+                        
+                        <select id="filter-group-sub" class="filter-select w-32" onchange="TodoModule.actions.setFilter('group-sub', this.value)" disabled>
+                            <option value="all">กลุ่มย่อยทั้งหมด</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <div class="w-px h-4 bg-gray-200 mx-1"></div>
+
+                    <select class="filter-select w-28" onchange="TodoModule.actions.setFilter('priority', this.value)">
+                        <option value="all">ทุกความสำคัญ</option>
+                        <option value="q1">🔥 ด่วนที่สุด</option>
+                        <option value="q2">📅 สำคัญ</option>
+                        <option value="q3">⚡ ด่วน</option>
+                        <option value="q4">☕ ทั่วไป</option>
+                    </select>
+                    <select class="filter-select w-28" onchange="TodoModule.actions.setFilter('status', this.value)">
+                        <option value="all">ทุกสถานะ</option>
+                        <option value="pending">รอเริ่ม</option>
+                        <option value="planning">วางแผน</option>
+                        <option value="in_progress">กำลังทำ</option>
+                        <option value="delayed">ล่าช้า</option>
+                        <option value="done">เสร็จสิ้น</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-gray-400"></i>
+                    <input type="text" placeholder="ค้นหา..." class="bg-transparent text-sm outline-none text-gray-700 w-20 md:w-32 focus:w-48 transition-all" oninput="TodoModule.actions.search(this.value)">
+                </div>
+                
+                <div class="h-8 w-px bg-gray-200 mx-1 hidden md:block"></div>
+                
+                <button onclick="TodoModule.actions.openGroupForm()" class="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 px-3 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 whitespace-nowrap">
+                    <i data-lucide="folder-plus" class="w-3 h-3"></i> กลุ่ม
+                </button>
+                <button onclick="TodoModule.actions.openTodoForm()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-1 whitespace-nowrap">
+                    <i data-lucide="plus" class="w-3 h-3"></i> สร้างงาน
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden min-h-0">
+        <!-- Left: Priority Queue (Clickable Header) -->
+        <div class="lg:col-span-4 flex flex-col gap-4 overflow-hidden">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
+                <div class="p-3 bg-orange-50 border-b border-orange-100 flex justify-between items-center cursor-pointer hover:bg-orange-100 transition-colors group" onclick="TodoModule.actions.openPriorityFullScreen()" title="คลิกเพื่อขยายจอใหญ่">
+                    <h3 class="font-bold text-orange-800 text-sm flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4"></i> งานเร่งด่วน (Priority)
+                        <i data-lucide="maximize-2" class="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-orange-600"></i>
+                    </h3>
+                    <span class="text-[10px] bg-white px-2 py-0.5 rounded-full text-orange-600 border border-orange-200 shadow-sm" id="priority-count">Loading...</span>
+                </div>
+                <!-- Priority List Container -->
+                <div id="priority-list" class="flex-1 overflow-y-auto p-3 space-y-3 custom-scroll bg-slate-50/50"></div>
+            </div>
+        </div>
+
+        <!-- Right: Folder Structure -->
+        <div class="lg:col-span-8 flex flex-col overflow-hidden">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
+                <div class="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2"><i data-lucide="folder-tree" class="w-4 h-4"></i> โครงสร้างงาน (Groups)</h3>
+                    <div class="flex gap-1">
+                        <button onclick="TodoModule.actions.expandAll()" class="p-1 hover:bg-white rounded text-slate-500" title="ขยายทั้งหมด"><i data-lucide="chevrons-down" class="w-3 h-3"></i></button>
+                        <button onclick="TodoModule.actions.collapseAll()" class="p-1 hover:bg-white rounded text-slate-500" title="ย่อทั้งหมด"><i data-lucide="chevrons-up" class="w-3 h-3"></i></button>
+                    </div>
+                </div>
+                <div id="group-list" class="flex-1 overflow-y-auto p-4 space-y-2 custom-scroll"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Popup -->
+    <div id="confirm-root" class="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center">
+            <h3 class="text-lg font-bold text-gray-800 mb-2" id="confirm-title">ยืนยัน?</h3>
+            <p class="text-gray-500 text-sm mb-4" id="confirm-msg">...</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="TodoModule.actions.closeConfirm()" class="px-4 py-2 bg-slate-100 rounded-lg text-slate-700 font-bold">ยกเลิก</button>
+                <button id="confirm-btn-yes" class="px-4 py-2 bg-orange-600 text-white rounded-lg font-bold">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Root -->
+    <div id="modal-root" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4"></div>
+
+    <script>
+        const PRIORITIES = {
+            'q1': { label: '🔥 ด่วนที่สุด (Do Now)', color: 'bg-red-100 text-red-700 border-red-200', score: 4 },
+            'q2': { label: '📅 สำคัญ (Plan)', color: 'bg-blue-100 text-blue-700 border-blue-200', score: 3 },
+            'q3': { label: '⚡ ด่วน (Delegate)', color: 'bg-orange-100 text-orange-700 border-orange-200', score: 2 },
+            'q4': { label: '☕ ทั่วไป (Later)', color: 'bg-slate-100 text-slate-600 border-slate-200', score: 1 }
+        };
+        
+        const STATUSES = {
+            'pending': { label: 'รอเริ่ม', icon: 'circle', color: 'text-slate-400', bg: 'bg-slate-100' },
+            'planning': { label: 'วางแผน', icon: 'map', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+            'in_progress': { label: 'กำลังทำ', icon: 'loader-2', color: 'text-blue-600', bg: 'bg-blue-50' },
+            'delayed': { label: 'ล่าช้า', icon: 'alert-circle', color: 'text-red-500', bg: 'bg-red-50' },
+            'done': { label: 'เสร็จสิ้น', icon: 'check-circle-2', color: 'text-green-600', bg: 'bg-green-50' }
+        };
+
+        const TodoModule = {
+            state: {
+                todos: [], groups: [], expanded: [], 
+                searchQuery: '', filterPriority: 'all', filterStatus: 'all', filterGroupMain: 'all', filterGroupSub: 'all',
+                modal: { isOpen: false, type: null, data: null },
+                confirm: { callback: null }
+            },
+
+            init() {
+                this.state.todos = Core.Storage.get('myQuickTodos', []);
+                // Ensure default group exists
+                let storedGroups = Core.Storage.get('myTodoGroups', []);
+                if (storedGroups.length === 0) storedGroups = [{id:'g_default', title:'📥 กล่องงานเข้า', color:'#64748b', parentId: null}];
+                this.state.groups = storedGroups;
+                
+                this.state.expanded = Core.Storage.get('myExpandedGroups', ['g_default']);
+                this.render();
+            },
+
+            save() {
+                Core.Storage.set('myQuickTodos', this.state.todos, 'data_updated');
+                Core.Storage.set('myTodoGroups', this.state.groups);
+                Core.Storage.set('myExpandedGroups', this.state.expanded);
+                this.render();
+            },
+
+            actions: {
+                search(q) { TodoModule.state.searchQuery = q.toLowerCase(); TodoModule.render(); },
+                
+                setFilter(type, value) {
+                    if(type === 'priority') TodoModule.state.filterPriority = value;
+                    if(type === 'status') TodoModule.state.filterStatus = value;
+                    
+                    if(type === 'group-main') {
+                        TodoModule.state.filterGroupMain = value;
+                        TodoModule.state.filterGroupSub = 'all'; // Reset sub filter
+                    }
+                    if(type === 'group-sub') {
+                        TodoModule.state.filterGroupSub = value;
+                    }
+                    
+                    TodoModule.render();
+                },
+
+                toggleGroup(id) {
+                    const idx = TodoModule.state.expanded.indexOf(id);
+                    if(idx === -1) TodoModule.state.expanded.push(id); else TodoModule.state.expanded.splice(idx, 1);
+                    TodoModule.save();
+                },
+                expandAll() { TodoModule.state.expanded = TodoModule.state.groups.map(g=>g.id); TodoModule.save(); },
+                collapseAll() { TodoModule.state.expanded = []; TodoModule.save(); },
+
+                showConfirm(title, msg, callback) {
+                    document.getElementById('confirm-title').innerText = title;
+                    document.getElementById('confirm-msg').innerText = msg;
+                    document.getElementById('confirm-btn-yes').onclick = () => { 
+                        try { callback(); } catch(e) { console.error("Callback Error", e); }
+                        TodoModule.actions.closeConfirm(); 
+                    };
+                    document.getElementById('confirm-root').classList.add('active');
+                    document.getElementById('confirm-root').style.display = 'flex';
+                },
+                closeConfirm() { 
+                    document.getElementById('confirm-root').classList.remove('active'); 
+                    document.getElementById('confirm-root').style.display = 'none';
+                },
+
+                openTodoForm(id = null, groupId = null) {
+                    const todo = id ? TodoModule.state.todos.find(t => t.id == id) : {
+                        id: Date.now(), title: '', date: Core.Util.todayISO(), 
+                        groupId: groupId || 'g_default', priority: 'q2', status: 'pending', remark: ''
+                    };
+                    if (id && !todo) return console.error("Task not found");
+                    TodoModule.state.modal = { isOpen: true, type: 'task', data: {...todo}, isEdit: !!id };
+                    TodoModule.renderModal();
+                },
+
+                openPriorityFullScreen() {
+                    TodoModule.state.modal = { isOpen: true, type: 'priority-full', data: null };
+                    TodoModule.renderModal();
+                },
+
+                saveTodo() {
+                    const d = TodoModule.state.modal.data;
+                    if(!d.title) return alert('กรุณาระบุชื่องาน');
+                    TodoModule.actions.showConfirm('ยืนยันการบันทึก?', 'ข้อมูลงานจะถูกบันทึกเข้าระบบ', () => {
+                        if(TodoModule.state.modal.isEdit) {
+                            const idx = TodoModule.state.todos.findIndex(t => t.id == d.id);
+                            if(idx > -1) TodoModule.state.todos[idx] = d;
+                        } else {
+                            TodoModule.state.todos.push(d);
+                        }
+                        TodoModule.actions.closeModal(); 
+                        TodoModule.save();
+                    });
+                },
+
+                deleteTodo(id) {
+                    TodoModule.actions.showConfirm('ยืนยันการลบ?', 'งานนี้จะถูกลบถาวร', () => {
+                        TodoModule.state.todos = TodoModule.state.todos.filter(t => t.id != id);
+                        if(TodoModule.state.modal.isOpen && TodoModule.state.modal.data && TodoModule.state.modal.data.id == id) {
+                            TodoModule.actions.closeModal();
+                        }
+                        if(TodoModule.state.modal.isOpen && TodoModule.state.modal.type === 'priority-full') {
+                            TodoModule.renderModal();
+                        }
+                        TodoModule.save();
+                    });
+                },
+
+                cycleStatus(id) {
+                    const t = TodoModule.state.todos.find(x => x.id == id);
+                    if(t) {
+                        const keys = Object.keys(STATUSES);
+                        const currentIndex = keys.indexOf(t.status);
+                        const nextIndex = (currentIndex + 1) % keys.length;
+                        t.status = keys[nextIndex];
+                        t.completed = t.status === 'done';
+                        TodoModule.save();
+                        if(TodoModule.state.modal.isOpen && TodoModule.state.modal.type === 'priority-full') {
+                            TodoModule.renderModal();
+                        }
+                    }
+                },
+
+                toggleViewed(id) {
+                    const t = TodoModule.state.todos.find(x => x.id == id);
+                    if(t) {
+                        const today = Core.Util.todayISO();
+                        t.lastViewed = t.lastViewed === today ? '' : today;
+                        TodoModule.save();
+                        if(TodoModule.state.modal.isOpen && TodoModule.state.modal.type === 'priority-full') {
+                            TodoModule.renderModal();
+                        }
+                    }
+                },
+
+                openGroupForm(id = null, parentId = null) {
+                    const group = id ? TodoModule.state.groups.find(g => g.id == id) : { 
+                        id: 'g_' + Date.now(), 
+                        title: '', 
+                        color: '#f97316', 
+                        parentId: parentId 
+                    };
+                    TodoModule.state.modal = { isOpen: true, type: 'group', data: {...group}, isEdit: !!id };
+                    TodoModule.renderModal();
+                },
+
+                saveGroup() {
+                    const d = TodoModule.state.modal.data;
+                    if(!d.title) return alert('กรุณาระบุชื่อกลุ่ม');
+                    
+                    if(d.parentId === d.id) d.parentId = null; // Prevent self-parenting
+
+                    TodoModule.actions.showConfirm('ยืนยันบันทึกกลุ่ม?', 'ข้อมูลกลุ่มงานจะถูกบันทึก', () => {
+                        if(TodoModule.state.modal.isEdit) {
+                            const idx = TodoModule.state.groups.findIndex(g => g.id == d.id);
+                            if(idx > -1) TodoModule.state.groups[idx] = d;
+                        } else {
+                            TodoModule.state.groups.push(d);
+                        }
+                        TodoModule.actions.closeModal();
+                        TodoModule.save();
+                    });
+                },
+
+                deleteGroup(id) {
+                    TodoModule.actions.showConfirm('ลบกลุ่มนี้?', 'งานและกลุ่มย่อยทั้งหมดจะหายไปด้วย!', () => {
+                        if (TodoModule.state.groups.length <= 1) return alert('ต้องเหลือกลุ่มงานอย่างน้อย 1 กลุ่ม');
+                        
+                        // Recursive delete finder
+                        const getDescendants = (gId) => {
+                            const children = TodoModule.state.groups.filter(g => g.parentId == gId);
+                            let ids = children.map(c => c.id);
+                            children.forEach(c => ids = ids.concat(getDescendants(c.id)));
+                            return ids;
+                        };
+                        
+                        const groupsToDelete = [id, ...getDescendants(id)];
+                        
+                        TodoModule.state.groups = TodoModule.state.groups.filter(g => !groupsToDelete.includes(g.id));
+                        TodoModule.state.todos = TodoModule.state.todos.filter(t => !groupsToDelete.includes(t.groupId));
+                        TodoModule.save();
+                    });
+                },
+
+                closeModal() { TodoModule.state.modal.isOpen = false; TodoModule.renderModal(); },
+
+                // --- Helper: Get ALL descendants for filter ---
+                getAllDescendantIds(groupId) {
+                    let descendants = [];
+                    const children = TodoModule.state.groups.filter(g => g.parentId == groupId);
+                    children.forEach(child => {
+                        descendants.push(child.id);
+                        descendants = descendants.concat(this.getAllDescendantIds(child.id));
+                    });
+                    return descendants;
+                }
+            },
+
+            // --- HTML Generators ---
+            getTaskCardHTML(t, isGrid = false) {
+                const p = PRIORITIES[t.priority] || PRIORITIES['q4']; 
+                const s = STATUSES[t.status] || STATUSES['pending'];
+                const todayISO = Core.Util.todayISO();
+                const isViewed = t.lastViewed === todayISO;
+                const cardHighlight = isViewed ? 'ring-2 ring-yellow-300 bg-yellow-50/50' : 'border-gray-200';
+                const eyeColor = isViewed ? 'text-blue-600' : 'text-slate-300 hover:text-slate-500';
+
+                const group = TodoModule.state.groups.find(g => g.id == t.groupId);
+                const groupLabel = group ? `
+                    <span class="text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 flex items-center gap-1 max-w-[100px] truncate" title="${group.title}">
+                        <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${group.color}"></span>
+                        <span class="truncate">${group.title}</span>
+                    </span>` : '';
+
+                const containerClass = isGrid 
+                    ? `bg-white p-4 rounded-lg border shadow-sm hover:shadow-md cursor-pointer group relative flex flex-col gap-2 h-full ${cardHighlight}` 
+                    : `bg-white p-4 rounded-lg border shadow-sm card-hover cursor-pointer group relative flex flex-col gap-2 ${cardHighlight} transition-all duration-300`;
+
+                return `
+                <div class="${containerClass}" onclick="TodoModule.actions.openTodoForm('${t.id}')">
+                    <div class="flex items-start gap-3">
+                        <button onclick="event.stopPropagation();TodoModule.actions.cycleStatus('${t.id}')" class="mt-1 ${s.color} hover:scale-110 transition-transform flex-shrink-0" title="คลิกเพื่อเปลี่ยนสถานะ">
+                            <i data-lucide="${s.icon}" class="w-6 h-6"></i>
+                        </button>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-gray-800 text-base mb-1 whitespace-normal break-words leading-snug">${t.title}</div>
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <span class="text-xs px-2 py-0.5 rounded border ${p.color}">${p.label}</span>
+                                <span class="text-xs px-2 py-0.5 rounded border ${s.bg} ${s.color} font-bold">${s.label}</span>
+                                ${groupLabel}
+                                <span class="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i> ${t.date}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ${t.remark ? `
+                    <div class="text-sm text-gray-600 bg-slate-50 p-3 rounded-lg border border-slate-100 mt-1 relative group-hover:bg-slate-100 transition-colors flex-1">
+                        <div class="flex items-start gap-2">
+                            <i data-lucide="message-square" class="w-4 h-4 mt-0.5 text-slate-400 flex-shrink-0"></i>
+                            <span class="whitespace-pre-wrap break-words leading-relaxed">${t.remark}</span>
+                        </div>
+                    </div>` : ''}
+                    <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="event.stopPropagation();TodoModule.actions.toggleViewed('${t.id}')" class="p-1 ${eyeColor} hover:bg-slate-100 rounded" title="${isViewed?'ดูแล้ววันนี้ (กดเพื่อยกเลิก)':'กดเพื่อรับทราบ'}">
+                            <i data-lucide="${isViewed ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="event.stopPropagation();TodoModule.actions.deleteTodo('${t.id}')" class="text-gray-300 hover:text-red-500 p-1 hover:bg-slate-100 rounded"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            },
+
+            getGroupOptionsHTML(currentId = null) {
+                const buildOptions = (parentId, level) => {
+                    const children = TodoModule.state.groups.filter(g => g.parentId == parentId);
+                    let html = '';
+                    children.forEach(g => {
+                        if (currentId && (g.id == currentId)) return;
+                        const indent = '&nbsp;'.repeat(level * 4);
+                        const symbol = level > 0 ? '└ ' : '';
+                        html += `<option value="${g.id}">${indent}${symbol}${g.title}</option>`;
+                        html += buildOptions(g.id, level + 1);
+                    });
+                    return html;
+                };
+                return `<option value="">(ไม่มี - เป็นกลุ่มหลัก)</option>` + buildOptions(null, 0);
+            },
+
+            renderGroupNode(group, level, filteredTodos) {
+                // Direct tasks only for listing
+                let gTasks = filteredTodos.filter(t => t.groupId == group.id);
+                gTasks.sort((a,b) => (a.status==='done') - (b.status==='done'));
+                
+                // --- NEW LOGIC: Calculate Aggregate Count ---
+                // Get ALL descendant IDs for this group
+                const descendantIds = TodoModule.actions.getAllDescendantIds(group.id);
+                // Combined set: self + descendants
+                const allGroupIds = new Set([group.id, ...descendantIds]);
+                // Count tasks in filteredTodos that belong to this branch
+                const totalCount = filteredTodos.filter(t => allGroupIds.has(t.groupId)).length;
+
+                const isExp = TodoModule.state.expanded.includes(group.id);
+                const borderClass = level > 0 ? 'border-l-2 border-slate-200 ml-4' : '';
+
+                let html = `
+                <div class="mb-2 ${borderClass}">
+                    <div class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer hover:bg-slate-50 group" 
+                         onclick="TodoModule.actions.toggleGroup('${group.id}')">
+                        <div class="flex items-center gap-2 overflow-hidden">
+                            <i data-lucide="${isExp?'chevron-down':'chevron-right'}" class="w-4 h-4 text-gray-400 flex-shrink-0"></i>
+                            <div class="font-bold text-gray-700 text-sm flex items-center gap-2 truncate">
+                                <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${group.color}"></span>
+                                ${group.title}
+                                <span class="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full">${totalCount}</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onclick="event.stopPropagation()">
+                            <button onclick="TodoModule.actions.openGroupForm(null, '${group.id}')" class="p-1 text-green-600 hover:bg-green-50 rounded" title="เพิ่มกลุ่มย่อย"><i data-lucide="folder-plus" class="w-4 h-4"></i></button>
+                            <button onclick="TodoModule.actions.openTodoForm(null, '${group.id}')" class="p-1 text-blue-600 hover:bg-blue-50 rounded" title="เพิ่มงาน"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                            <button onclick="TodoModule.actions.openGroupForm('${group.id}')" class="p-1 text-slate-600 hover:bg-slate-100 rounded" title="แก้ไข"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                            <button onclick="TodoModule.actions.deleteGroup('${group.id}')" class="p-1 text-red-500 hover:bg-red-50 rounded" title="ลบ"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    
+                    ${isExp ? `
+                    <div class="mt-2 space-y-2 pl-4">
+                        ${gTasks.map(t => {
+                            const p=PRIORITIES[t.priority] || PRIORITIES['q4']; 
+                            const s=STATUSES[t.status] || STATUSES['pending']; 
+                            const done=t.status==='done';
+                            const isViewed = t.lastViewed === Core.Util.todayISO();
+                            return `
+                            <div class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:shadow-sm cursor-pointer group ${done?'opacity-60 bg-gray-50':''} ${isViewed?'ring-1 ring-yellow-300 bg-yellow-50/30':''}" onclick="TodoModule.actions.openTodoForm('${t.id}')">
+                                <button onclick="event.stopPropagation();TodoModule.actions.cycleStatus('${t.id}')" class="${s.color} hover:scale-110 transition-transform flex-shrink-0"><i data-lucide="${s.icon}" class="w-5 h-5"></i></button>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-medium text-gray-700 truncate ${done?'line-through text-gray-400':''}">${t.title}</div>
+                                    <div class="flex gap-2 mt-0.5 items-center">
+                                        <span class="text-[10px] ${p.color} px-1.5 rounded border">${p.label.split('(')[0]}</span>
+                                        <span class="text-[10px] ${s.color} ${s.bg} px-1.5 rounded border border-transparent font-bold">${s.label}</span>
+                                        ${isViewed ? `<i data-lucide="eye" class="w-3 h-3 text-blue-400 ml-1"></i>` : ''}
+                                    </div>
+                                </div>
+                                <button onclick="event.stopPropagation();TodoModule.actions.deleteTodo('${t.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>`
+                        }).join('')}
+                        
+                        <!-- Recursively render children -->
+                        ${this.renderChildren(group.id, level + 1, filteredTodos)}
+                    </div>` : ''}
+                </div>`;
+                return html;
+            },
+
+            renderChildren(parentId, level, filteredTodos) {
+                const children = TodoModule.state.groups.filter(g => g.parentId == parentId);
+                return children.map(child => this.renderGroupNode(child, level, filteredTodos)).join('');
+            },
+
+            render() {
+                const st = this.state;
+                let todos = st.todos;
+                
+                // Stats
+                document.getElementById('stat-pending').innerText = `รอ: ${todos.filter(t=>t.status==='pending').length}`;
+                document.getElementById('stat-process').innerText = `ทำ: ${todos.filter(t=>t.status==='in_progress').length}`;
+                document.getElementById('stat-delay').innerText = `ช้า: ${todos.filter(t=>t.status==='delayed').length}`;
+                document.getElementById('stat-done').innerText = `เสร็จ: ${todos.filter(t=>t.status==='done').length}`;
+
+                // --- Base Filtering (Search, Priority, Status) ---
+                let filteredTodos = todos;
+                if(st.searchQuery) filteredTodos = filteredTodos.filter(t => t.title.toLowerCase().includes(st.searchQuery));
+                if(st.filterPriority !== 'all') filteredTodos = filteredTodos.filter(t => t.priority === st.filterPriority);
+                if(st.filterStatus !== 'all') filteredTodos = filteredTodos.filter(t => t.status === st.filterStatus);
+
+                // --- Cascading Group Filter Logic ---
+                let visibleGroupIds = new Set();
+                let rootGroupsToRender = [];
+                let activeFilterGroup = st.filterGroupSub !== 'all' ? st.filterGroupSub : st.filterGroupMain;
+
+                if (activeFilterGroup === 'all') {
+                    // Show all roots
+                    rootGroupsToRender = st.groups.filter(g => !g.parentId);
+                } else {
+                    // Show specific group and its descendants
+                    const selectedGroup = st.groups.find(g => g.id == activeFilterGroup);
+                    if (selectedGroup) {
+                        rootGroupsToRender = [selectedGroup]; // This acts as the visual root
+                        
+                        visibleGroupIds.add(selectedGroup.id);
+                        TodoModule.actions.getAllDescendantIds(selectedGroup.id).forEach(id => visibleGroupIds.add(id));
+                        
+                        // Filter todos by these groups
+                        filteredTodos = filteredTodos.filter(t => visibleGroupIds.has(t.groupId));
+                    }
+                }
+
+                // --- Populate Filter Option (Two Levels) ---
+                const mainSelect = document.getElementById('filter-group-main');
+                const subSelect = document.getElementById('filter-group-sub');
+                
+                if (mainSelect && subSelect) {
+                    // 1. Populate Main
+                    const mainGroups = st.groups.filter(g => !g.parentId);
+                    mainSelect.innerHTML = `<option value="all">กลุ่มหลักทั้งหมด</option>` + 
+                        mainGroups.map(g => `<option value="${g.id}">${g.title}</option>`).join('');
+                    mainSelect.value = st.filterGroupMain;
+
+                    // 2. Populate Sub
+                    if (st.filterGroupMain !== 'all') {
+                        subSelect.disabled = false;
+                        const subGroups = st.groups.filter(g => g.parentId == st.filterGroupMain);
+                        subSelect.innerHTML = `<option value="all">กลุ่มย่อยทั้งหมด</option>` + 
+                            subGroups.map(g => `<option value="${g.id}">${g.title}</option>`).join('');
+                        subSelect.value = st.filterGroupSub;
+                    } else {
+                        subSelect.innerHTML = `<option value="all">กลุ่มย่อยทั้งหมด</option>`;
+                        subSelect.disabled = true;
+                        subSelect.value = 'all';
+                    }
+                }
+
+                // --- 1. Priority List (Left Side) ---
+                const pList = filteredTodos
+                    .filter(t => t.status !== 'done') 
+                    .sort((a,b) => {
+                        const scoreA = PRIORITIES[a.priority] ? PRIORITIES[a.priority].score : 0;
+                        const scoreB = PRIORITIES[b.priority] ? PRIORITIES[b.priority].score : 0;
+                        return scoreB - scoreA;
+                    });
+                
+                document.getElementById('priority-count').innerText = `${pList.length} รายการ`;
+                const pContainer = document.getElementById('priority-list');
+                pContainer.innerHTML = pList.length === 0 
+                    ? `<div class="text-center text-gray-400 py-10 text-sm">ไม่พบงานที่ตรงเงื่อนไข</div>` 
+                    : pList.map(t => this.getTaskCardHTML(t)).join('');
+
+                // --- 2. Group List (Right Side) ---
+                const groupContainer = document.getElementById('group-list');
+                const treeHtml = rootGroupsToRender.map(g => this.renderGroupNode(g, 0, filteredTodos)).join('');
+                groupContainer.innerHTML = treeHtml || '<div class="text-center text-gray-400 py-10">ไม่พบกลุ่มงาน</div>';
+
+                lucide.createIcons();
+            },
+
+            renderModal() {
+                const root = document.getElementById('modal-root');
+                const m = this.state.modal;
+                
+                if(m.isOpen) {
+                    root.classList.add('active');
+                    root.style.display = 'flex';
+                    const d = m.data;
+                    const inputClass = "w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-orange-500 outline-none";
+                    const labelClass = "block text-xs font-bold text-gray-500 mb-1";
+
+                    if(m.type === 'priority-full') {
+                        let todos = this.state.todos;
+                        if(this.state.searchQuery) todos = todos.filter(t => t.title.toLowerCase().includes(this.state.searchQuery));
+                        if(this.state.filterPriority !== 'all') todos = todos.filter(t => t.priority === this.state.filterPriority);
+                        if(this.state.filterStatus !== 'all') todos = todos.filter(t => t.status === this.state.filterStatus);
+                        
+                        let activeFilterGroup = this.state.filterGroupSub !== 'all' ? this.state.filterGroupSub : this.state.filterGroupMain;
+                        if(activeFilterGroup !== 'all') {
+                             const validIds = new Set([activeFilterGroup, ...TodoModule.actions.getAllDescendantIds(activeFilterGroup)]);
+                             todos = todos.filter(t => validIds.has(t.groupId));
+                        }
+
+                        const pList = todos.filter(t => t.status !== 'done') 
+                            .sort((a,b) => (PRIORITIES[b.priority]?.score||0) - (PRIORITIES[a.priority]?.score||0));
+
+                        root.innerHTML = `
+                        <div class="bg-gray-100 w-full h-full max-w-[95vw] max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-[scaleIn_0.2s_ease-out]">
+                            <div class="bg-white px-6 py-4 border-b border-gray-200 flex justify-between items-center shadow-sm z-10">
+                                <h2 class="text-xl font-bold text-orange-700 flex items-center gap-2"><i data-lucide="zap" class="w-6 h-6"></i> รายการงานทั้งหมด (Full Screen View) <span class="text-sm font-normal text-gray-500 ml-2 bg-gray-100 px-3 py-1 rounded-full">${pList.length} รายการ</span></h2>
+                                <button onclick="TodoModule.actions.closeModal()" class="p-2 hover:bg-gray-100 rounded-full text-gray-500"><i data-lucide="x" class="w-6 h-6"></i></button>
+                            </div>
+                            <div class="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scroll">
+                                ${pList.length === 0 ? '<div class="h-full flex items-center justify-center text-gray-400 text-lg">ไม่พบงานที่ตรงเงื่อนไข</div>' : `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">${pList.map(t => TodoModule.getTaskCardHTML(t, true)).join('')}</div>`}
+                            </div>
+                        </div>`;
+                    }
+                    else if(m.type === 'task') {
+                        root.innerHTML = `
+                        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-[scaleIn_0.2s_ease-out]">
+                            <div class="p-4 border-b bg-orange-50 flex justify-between items-center"><h3 class="font-bold text-lg text-orange-900">รายละเอียดงาน</h3><button onclick="TodoModule.actions.closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div>
+                            <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                                <div><label class="${labelClass}">ชื่องาน</label><input class="${inputClass}" value="${d.title}" oninput="TodoModule.state.modal.data.title=this.value" autofocus></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label class="${labelClass}">กลุ่มงาน</label><select class="${inputClass}" onchange="TodoModule.state.modal.data.groupId=this.value">${this.getGroupOptionsHTML(null)}</select></div>
+                                    <div><label class="${labelClass}">สถานะ</label><select class="${inputClass}" onchange="TodoModule.state.modal.data.status=this.value">${Object.entries(STATUSES).map(([key, val]) => `<option value="${key}" ${d.status===key?'selected':''}>${val.label}</option>`).join('')}</select></div>
+                                </div>
+                                <div><label class="${labelClass}">วันที่กำหนด</label><input type="date" class="${inputClass}" value="${d.date}" onchange="TodoModule.state.modal.data.date=this.value"></div>
+                                <div><label class="${labelClass}">ระดับความสำคัญ</label><div class="grid grid-cols-1 gap-2">${Object.keys(PRIORITIES).map(k=>`<label class="flex items-center gap-3 p-2 border rounded-lg cursor-pointer hover:bg-slate-50 ${d.priority===k?'bg-orange-50 border-orange-300 ring-1 ring-orange-200':'border-gray-200'}"><input type="radio" name="p" class="hidden" onclick="TodoModule.state.modal.data.priority='${k}';TodoModule.renderModal()" ${d.priority===k?'checked':''}><div class="flex-1 text-xs font-bold ${PRIORITIES[k].color.replace('bg-','text-').split(' ')[1]}">${PRIORITIES[k].label}</div>${d.priority===k?'<i data-lucide="check-circle" class="w-4 h-4 text-orange-500"></i>':'<div class="w-4 h-4 rounded-full border border-gray-300"></div>'}</label>`).join('')}</div></div>
+                                <div><label class="${labelClass}">หมายเหตุ</label><textarea class="${inputClass} h-24 resize-none" oninput="TodoModule.state.modal.data.remark=this.value">${d.remark||''}</textarea></div>
+                            </div>
+                            <div class="p-4 border-t bg-gray-50 flex gap-3"><button onclick="TodoModule.actions.closeModal()" class="flex-1 py-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 font-medium text-gray-700">ยกเลิก</button><button onclick="TodoModule.actions.saveTodo()" class="flex-1 py-2.5 bg-orange-600 text-white rounded-lg shadow font-bold hover:bg-orange-700">บันทึก</button></div>
+                        </div>`;
+                        setTimeout(() => { const s=document.querySelector('select[onchange*="groupId"]'); if(s)s.value=d.groupId; }, 0);
+                    } 
+                    else {
+                        root.innerHTML = `
+                        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-[scaleIn_0.2s_ease-out]">
+                            <div class="p-4 border-b bg-gray-50 flex justify-between items-center"><h3 class="font-bold text-lg text-gray-800">จัดการกลุ่มงาน</h3><button onclick="TodoModule.actions.closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div>
+                            <div class="p-6 space-y-4">
+                                <div><label class="${labelClass}">ชื่อกลุ่ม</label><input class="${inputClass}" value="${d.title}" oninput="TodoModule.state.modal.data.title=this.value" autofocus></div>
+                                <div><label class="${labelClass}">อยู่ภายใต้กลุ่ม (Parent)</label><select class="${inputClass}" onchange="TodoModule.state.modal.data.parentId=this.value || null">${this.getGroupOptionsHTML(d.id)}</select></div>
+                                <div><label class="${labelClass}">สีสัญลักษณ์</label><div class="flex gap-2 h-10"><input type="color" class="h-full w-14 rounded border cursor-pointer p-0" value="${d.color}" onchange="TodoModule.state.modal.data.color=this.value"><div class="flex-1 border bg-gray-50 rounded flex items-center justify-center text-xs text-gray-400">เลือกสี</div></div></div>
+                            </div>
+                            <div class="p-4 border-t bg-gray-50 flex gap-3"><button onclick="TodoModule.actions.closeModal()" class="flex-1 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-700 font-medium">ยกเลิก</button><button onclick="TodoModule.actions.saveGroup()" class="flex-1 py-2 bg-orange-600 text-white rounded-lg shadow font-bold hover:bg-orange-700">บันทึก</button></div>
+                        </div>`;
+                        setTimeout(() => { const s=document.querySelector('select[onchange*="parentId"]'); if(s)s.value=d.parentId||""; }, 0);
+                    }
+                    lucide.createIcons();
+                } else {
+                    root.classList.remove('active');
+                    root.style.display = 'none';
+                    root.innerHTML = '';
+                }
+            }
+        };
+
+        window.onload = () => TodoModule.init();
+    </script>
+</body>
+</html>

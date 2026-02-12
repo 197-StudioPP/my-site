@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <!-- ════════════════════════════════════════════════════════
+         META INFORMATION
+         ════════════════════════════════════════════════════════ -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engineering Workspace v5.5 - มือใหม่ก็เข้าใจได้</title>
+    
+    <!-- ════════════════════════════════════════════════════════
+         EXTERNAL LIBRARIES (โหลดจาก CDN)
+         ════════════════════════════════════════════════════════ -->
+    
+    <!-- Tailwind CSS: Framework สำหรับจัดการ Layout และ Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons: ไอคอนสวยๆ สำหรับ UI -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Core.js: ระบบหลักของโปรแกรม (จัดการข้อมูล, ค้นหา, สื่อสาร) -->
+    <script src="core.js"></script> 
+    
+    <!-- Google Fonts: ฟอนต์ภาษาไทยที่สวยงาม -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- ════════════════════════════════════════════════════════
+         CUSTOM STYLES
+         ════════════════════════════════════════════════════════ -->
+    <style>
+        /* ฟอนต์และสีพื้นหลังหลัก */
+        body { 
+            font-family: 'Prompt', sans-serif; 
+            background-color: #f3f4f6; 
+        }
+        
+        /* ซ่อน Scrollbar ที่ไม่จำเป็น */
+        .scrollbar-hide::-webkit-scrollbar { 
+            display: none; 
+        }
+        
+        /* สไตล์สำหรับ iframe (กรอบแสดงหน้าย่อย) */
+        iframe { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            background-color: #f9fafb; 
+        }
+        
+        /* Hover effect สำหรับผลลัพธ์การค้นหา */
+        .search-result-item:hover { 
+            background-color: #f1f5f9; 
+        }
+        
+        /* แอนิเมชั่นเมื่อหน้าโหลดเสร็จ */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    
+    <!-- ════════════════════════════════════════════════════════
+         NAVIGATION CONFIGURATION
+         ════════════════════════════════════════════════════════ -->
+    <script>
+        /**
+         * ═══════════════════════════════════════════════════════
+         * NAV: ข้อมูลเมนูทั้งหมดในระบบ
+         * ═══════════════════════════════════════════════════════
+         * 
+         * โครงสร้าง:
+         * 'ชื่อไฟล์.html': { 
+         *     title: 'ชื่อที่แสดงบน Header',
+         *     btnId: 'ID ของปุ่มเมนู'
+         * }
+         */
+        const NAV = {
+            'home.html':      { title: 'ภาพรวมวันนี้ (Overview)', btnId: 'nav-home' },
+            'tasks.html':     { title: 'Timeline & Plan',         btnId: 'nav-tasks' },
+            'todo.html':      { title: 'รายการสิ่งที่ต้องทำ (To-Do)', btnId: 'nav-todo' },
+            'dashboard.html': { title: 'Dashboard Files',         btnId: 'nav-dashboard' },
+            'notes.html':     { title: 'Engineering Notes',       btnId: 'nav-notes' },
+            'tools.html':     { title: 'Engineering Tools',       btnId: 'nav-tools' },
+            'settings.html':  { title: 'System Settings',         btnId: 'nav-settings' }
+        };
+
+        /**
+         * คลาส CSS สำหรับปุ่มเมนู
+         */
+        const DEFAULT_BTN_CLASS = 'w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group';
+        const ACTIVE_BTN_CLASS  = 'w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 bg-blue-600 text-white shadow-md group';
+
+        /**
+         * ═══════════════════════════════════════════════════════
+         * LOADER FUNCTIONS: แสดง/ซ่อน Loading Screen
+         * ═══════════════════════════════════════════════════════
+         */
+        function showLoader() { 
+            const loader = document.getElementById('loader'); 
+            if (loader) loader.style.zIndex = '20'; 
+        }
+        
+        function hideLoader() { 
+            const loader = document.getElementById('loader'); 
+            if (loader) loader.style.zIndex = '0'; 
+        }
+
+        /**
+         * ═══════════════════════════════════════════════════════
+         * setActiveNav: ไฮไลต์ปุ่มเมนูที่กำลังใช้งาน
+         * ═══════════════════════════════════════════════════════
+         * @param {string} fileName - ชื่อไฟล์ที่กำลังแสดง
+         */
+        function setActiveNav(fileName) {
+            // รีเซ็ตปุ่มทั้งหมดให้เป็นสีปกติ
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.className = DEFAULT_BTN_CLASS;
+            });
+            
+            // หาข้อมูลของหน้าปัจจุบัน
+            const nav = NAV[fileName];
+            if (!nav) return;
+            
+            // ไฮไลต์ปุ่มที่ถูกเลือก
+            const btn = document.getElementById(nav.btnId);
+            if (btn) btn.className = ACTIVE_BTN_CLASS;
+        }
+
+        /**
+         * ═══════════════════════════════════════════════════════
+         * loadModule: โหลดหน้าย่อยใน iframe
+         * ═══════════════════════════════════════════════════════
+         * @param {string} fileName - ชื่อไฟล์ที่ต้องการโหลด
+         * @param {string} title - ชื่อหน้า (optional)
+         * @param {HTMLElement} btnElement - ปุ่มที่ถูกคลิก (optional)
+         */
+        function loadModule(fileName, title = null, btnElement = null) {
+            console.log('🔄 กำลังโหลดหน้า:', fileName);
+            
+            // ดึง Element สำคัญ
+            const frame = document.getElementById('app-frame');
+            const titleEl = document.getElementById('page-title');
+            
+            // ตรวจสอบว่าไฟล์ที่ร้องขอมีในระบบหรือไม่
+            let pagePath = String(fileName || '').trim();
+            
+            // ถ้าผู้ใช้ป้อนแค่ชื่อไฟล์ (ไม่มี .html)
+            if (!NAV[pagePath] && NAV[pagePath + '.html']) {
+                pagePath = pagePath + '.html';
+            }
+            
+            // ถ้าไม่เจอหน้าในระบบ
+            if (!NAV[pagePath]) {
+                console.warn('⚠️ ไม่พบหน้า:', fileName);
+                return;
+            }
+
+            // แสดง Loading Screen
+            showLoader();
+            
+            // อัปเดตชื่อหน้าบน Header
+            const resolvedTitle = title || NAV[pagePath].title;
+            if (titleEl) titleEl.textContent = resolvedTitle;
+            
+            // ไฮไลต์เมนูที่ถูกเลือก
+            setActiveNav(pagePath);
+            
+            // โหลดหน้าใน iframe (delay เล็กน้อยเพื่อให้ Loading แสดงได้)
+            setTimeout(() => { 
+                frame.src = pagePath; 
+                console.log('✅ โหลดหน้าสำเร็จ:', pagePath);
+            }, 50);
+        }
+        
+        // Export ฟังก์ชันเพื่อให้หน้าอื่นเรียกใช้ได้
+        window.loadModule = loadModule;
+        
+        /**
+         * ═══════════════════════════════════════════════════════
+         * MESSAGE LISTENER: รับคำสั่งจากหน้าย่อย (iframe)
+         * ═══════════════════════════════════════════════════════
+         * 
+         * ใช้สำหรับเมื่อหน้าย่อยต้องการนำทางไปหน้าอื่น
+         */
+        window.addEventListener('message', function(event) {
+            const data = event.data;
+            
+            // ตรวจสอบว่าเป็นคำสั่ง navigate หรือไม่
+            if (data && data.action === 'navigate') {
+                console.log('📨 ได้รับคำสั่ง navigate จาก iframe:', data.page);
+                loadModule(data.page, data.title);
+            }
+        });
+
+        // ═══════════════════════════════════════════════════════
+        // GLOBAL SEARCH LOGIC
+        // ═══════════════════════════════════════════════════════
+        
+        let searchTimeout; // เก็บ timeout สำหรับ debounce
+        
+        /**
+         * handleSearch: จัดการการค้นหา
+         * @param {string} query - คำค้นหา
+         */
+        function handleSearch(query) {
+            const resultsDiv = document.getElementById('search-results');
+            
+            // ถ้าไม่มีคำค้นหา ซ่อนผลลัพธ์
+            if(!query) { 
+                resultsDiv.classList.add('hidden'); 
+                return; 
+            }
+            
+            // ใช้ debounce เพื่อไม่ให้ค้นหาบ่อยเกินไป
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                console.log('🔍 กำลังค้นหา:', query);
+                const results = Core.Search.execute(query);
+                renderSearchResults(results);
+            }, 300); // รอ 300ms หลังจากหยุดพิมพ์
+        }
+
+        /**
+         * renderSearchResults: แสดงผลลัพธ์การค้นหา
+         * @param {Array} results - ผลลัพธ์ที่ได้
+         */
+        function renderSearchResults(results) {
+            const container = document.getElementById('search-results');
+            
+            // ถ้าไม่เจออะไร
+            if(results.length === 0) {
+                container.innerHTML = '<div class="p-4 text-sm text-gray-500 text-center">ไม่พบข้อมูล</div>';
+            } else {
+                // แสดงผลลัพธ์ (สูงสุด 8 รายการ)
+                container.innerHTML = results.slice(0, 8).map(r => `
+                    <div onclick="navigateToResult('${r.link}', '${r.type}: ${r.title}')" 
+                         class="p-3 border-b border-gray-100 cursor-pointer search-result-item flex items-center gap-3 transition-colors">
+                        <!-- ป้ายประเภท -->
+                        <div class="p-2 rounded bg-blue-50 text-blue-600 text-xs font-bold w-16 text-center shrink-0">
+                            ${r.type}
+                        </div>
+                        <!-- ข้อมูล -->
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-bold text-gray-800 truncate">${r.title}</div>
+                            <div class="text-xs text-gray-400 truncate">${r.subtitle}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            // แสดงผลลัพธ์
+            container.classList.remove('hidden');
+            console.log(`✅ แสดงผลลัพธ์: ${results.length} รายการ`);
+        }
+
+        /**
+         * navigateToResult: ไปยังหน้าที่เลือกจากผลลัพธ์
+         * @param {string} page - หน้าที่ต้องการไป
+         * @param {string} title - ชื่อหน้า
+         */
+        function navigateToResult(page, title) {
+            loadModule(page, title);
+            
+            // ซ่อนผลลัพธ์และล้างช่องค้นหา
+            document.getElementById('search-results').classList.add('hidden');
+            document.getElementById('global-search').value = '';
+        }
+
+        /**
+         * ปิดผลลัพธ์การค้นหาเมื่อคลิกข้างนอก
+         */
+        document.addEventListener('click', (e) => {
+            if(!e.target.closest('#search-container')) {
+                document.getElementById('search-results').classList.add('hidden');
+            }
+        });
+    </script>
+</head>
+
+<body class="h-screen flex overflow-hidden">
+    <!-- ════════════════════════════════════════════════════════
+         SIDEBAR: เมนูด้านซ้าย
+         ════════════════════════════════════════════════════════ -->
+    <aside class="w-20 lg:w-64 bg-slate-900 text-white flex flex-col shadow-xl flex-shrink-0 transition-all duration-300 z-50">
+        <!-- Logo และชื่อโปรแกรม -->
+        <div class="p-4 flex items-center justify-center lg:justify-start gap-3 h-20 border-b border-slate-700">
+            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg flex-shrink-0">
+                <i data-lucide="box" class="text-white w-6 h-6"></i>
+            </div>
+            <span class="hidden lg:block font-bold text-xl tracking-tight truncate">Workspace</span>
+        </div>
+        
+        <!-- ปุ่มเมนูทั้งหมด -->
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <!-- ปุ่มภาพรวม -->
+            <button onclick="loadModule('home.html', null, this)" 
+                    id="nav-home" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 bg-blue-600 text-white shadow-md group">
+                <i data-lucide="activity" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">ภาพรวม</span>
+            </button>
+            
+            <!-- ปุ่ม Timeline -->
+            <button onclick="loadModule('tasks.html', null, this)" 
+                    id="nav-tasks" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="calendar-clock" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">Timeline</span>
+            </button>
+            
+            <!-- ปุ่ม To-Do List -->
+            <button onclick="loadModule('todo.html', null, this)" 
+                    id="nav-todo" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="list-todo" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">To-Do List</span>
+            </button>
+            
+            <!-- ปุ่ม Files -->
+            <button onclick="loadModule('dashboard.html', null, this)" 
+                    id="nav-dashboard" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="layout-grid" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">Files</span>
+            </button>
+            
+            <!-- ปุ่ม Notes -->
+            <button onclick="loadModule('notes.html', null, this)" 
+                    id="nav-notes" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="notebook-pen" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">Notes</span>
+            </button>
+            
+            <!-- ปุ่ม Tools -->
+            <button onclick="loadModule('tools.html', null, this)" 
+                    id="nav-tools" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="wrench" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">Tools</span>
+            </button>
+            
+            <!-- ปุ่ม Settings -->
+            <button onclick="loadModule('settings.html', null, this)" 
+                    id="nav-settings" 
+                    class="w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-slate-400 hover:bg-slate-800 hover:text-white group">
+                <i data-lucide="settings" class="w-5 h-5 flex-shrink-0"></i>
+                <span class="hidden lg:block font-medium">Settings</span>
+            </button>
+        </nav>
+        
+        <!-- เวอร์ชัน -->
+        <div class="p-4 border-t border-slate-700 text-slate-500 text-xs text-center lg:text-left">
+            <span class="hidden lg:inline">v5.5 - มือใหม่ฉบับ</span>
+        </div>
+    </aside>
+
+    <!-- ════════════════════════════════════════════════════════
+         MAIN CONTENT: เนื้อหาหลัก
+         ════════════════════════════════════════════════════════ -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative bg-gray-50">
+        <!-- ────────────────────────────────────────────────────
+             HEADER: ส่วนบน (ชื่อหน้า + ช่องค้นหา)
+             ──────────────────────────────────────────────────── -->
+        <header class="bg-white h-16 shadow-sm flex items-center justify-between px-6 sticky top-0 z-40 flex-shrink-0 border-b border-gray-200">
+            <!-- ชื่อหน้าปัจจุบัน -->
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="p-1.5 bg-gray-100 rounded-lg text-gray-500">
+                    <i data-lucide="monitor" class="w-5 h-5"></i>
+                </div>
+                <span class="text-gray-800 text-lg font-bold truncate" id="page-title">
+                    ภาพรวมวันนี้ (Overview)
+                </span>
+            </div>
+            
+            <!-- ช่องค้นหาแบบ Global Search -->
+            <div class="flex-1 max-w-md mx-4 relative" id="search-container">
+                <div class="relative group">
+                    <!-- ไอคอนค้นหา -->
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500"></i>
+                    
+                    <!-- ช่องพิมพ์คำค้นหา -->
+                    <input id="global-search" 
+                           type="text" 
+                           placeholder="ค้นหา งาน, โน้ต, เอกสาร..." 
+                           class="w-full bg-gray-50 border border-gray-200 text-sm rounded-full pl-10 pr-4 py-2 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                           oninput="handleSearch(this.value)" 
+                           onfocus="handleSearch(this.value)">
+                </div>
+                
+                <!-- Dropdown แสดงผลลัพธ์การค้นหา -->
+                <div id="search-results" 
+                     class="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 hidden max-h-96 overflow-y-auto z-50">
+                    <!-- ผลลัพธ์จะแสดงที่นี่ -->
+                </div>
+            </div>
+
+            <!-- โปรไฟล์ผู้ใช้ -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm border-2 border-white shadow-sm">
+                    E
+                </div>
+            </div>
+        </header>
+
+        <!-- ────────────────────────────────────────────────────
+             IFRAME CONTAINER: กรอบแสดงหน้าย่อย
+             ──────────────────────────────────────────────────── -->
+        <div class="flex-1 relative w-full h-full">
+            <!-- Loading Screen -->
+            <div id="loader" 
+                 class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-0">
+                <i data-lucide="loader-2" class="w-10 h-10 text-blue-500 animate-spin mb-3"></i>
+                <p class="text-gray-400 text-sm">กำลังโหลด...</p>
+            </div>
+            
+            <!-- iframe สำหรับแสดงหน้าย่อย -->
+            <iframe id="app-frame" 
+                    src="home.html" 
+                    class="relative z-10" 
+                    onload="hideLoader()">
+            </iframe>
+        </div>
+    </main>
+    
+    <!-- ════════════════════════════════════════════════════════
+         INITIALIZATION SCRIPT
+         ════════════════════════════════════════════════════════ -->
+    <script>
+        /**
+         * เมื่อหน้าโหลดเสร็จ ให้สร้างไอคอนทั้งหมด
+         */
+        document.addEventListener('DOMContentLoaded', () => { 
+            console.log('✅ Engineering Workspace โหลดเสร็จสมบูรณ์');
+            lucide.createIcons(); 
+        });
+    </script>
+</body>
+</html>
